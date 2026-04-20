@@ -9,6 +9,8 @@ struct ActiveSetView: View {
     let settings: AppSettings
     let onClose: () -> Void
 
+    @State private var editingField: NumericEditField?
+
     private var cursor: (ExerciseLog, Int)? {
         controller.activeCursor()
     }
@@ -42,6 +44,13 @@ struct ActiveSetView: View {
         .onDisappear {
             timer.stop()
             UIApplication.shared.isIdleTimerDisabled = false
+        }
+        .sheet(item: $editingField) { field in
+            NumericEditSheet(field: field, unit: settings.units.rawValue) {
+                controller.save()
+            }
+            .presentationDetents([.fraction(0.35), .medium])
+            .presentationDragIndicator(.visible)
         }
     }
 
@@ -84,20 +93,24 @@ struct ActiveSetView: View {
 
             Spacer(minLength: 0)
 
-            // HUGE weight × reps (tap ± to edit this set)
+            // HUGE weight × reps (tap number to type; ± chips bump)
             VStack(spacing: 4) {
-                HStack(alignment: .firstTextBaseline, spacing: 0) {
-                    Text(GTMath.formatWeight(set.weight))
-                        .font(.gtDisplay(168, weight: .semibold))
-                        .tracking(-7)
-                        .foregroundColor(GT.ink)
-                        .minimumScaleFactor(0.5)
-                        .lineLimit(1)
-                    Text(settings.units.rawValue)
-                        .font(.gtMono(22))
-                        .foregroundColor(GT.ink3)
-                        .padding(.leading, 6)
+                Button { editingField = .weight(set) } label: {
+                    HStack(alignment: .firstTextBaseline, spacing: 0) {
+                        Text(GTMath.formatWeight(set.weight))
+                            .font(.gtDisplay(168, weight: .semibold))
+                            .tracking(-7)
+                            .foregroundColor(GT.ink)
+                            .minimumScaleFactor(0.5)
+                            .lineLimit(1)
+                        Text(settings.units.rawValue)
+                            .font(.gtMono(22))
+                            .foregroundColor(GT.ink3)
+                            .padding(.leading, 6)
+                    }
+                    .contentShape(Rectangle())
                 }
+                .buttonStyle(.plain)
 
                 HStack(spacing: 8) {
                     editChip("−\(GTMath.formatWeight(settings.weightStep))") {
@@ -109,18 +122,22 @@ struct ActiveSetView: View {
                 }
                 .padding(.top, 2)
 
-                HStack(alignment: .center, spacing: 10) {
-                    Text("×")
-                        .font(.gtDisplay(40, weight: .regular))
-                        .foregroundColor(GT.ink3)
-                    Text("\(set.reps)")
-                        .font(.gtDisplay(56, weight: .semibold))
-                        .tracking(-1.5)
-                        .foregroundColor(GT.lime)
-                    Text("reps")
-                        .font(.gtMono(15))
-                        .foregroundColor(GT.ink3)
+                Button { editingField = .reps(set) } label: {
+                    HStack(alignment: .center, spacing: 10) {
+                        Text("×")
+                            .font(.gtDisplay(40, weight: .regular))
+                            .foregroundColor(GT.ink3)
+                        Text("\(set.reps)")
+                            .font(.gtDisplay(56, weight: .semibold))
+                            .tracking(-1.5)
+                            .foregroundColor(GT.lime)
+                        Text("reps")
+                            .font(.gtMono(15))
+                            .foregroundColor(GT.ink3)
+                    }
+                    .contentShape(Rectangle())
                 }
+                .buttonStyle(.plain)
                 .padding(.top, 12)
 
                 HStack(spacing: 8) {
@@ -345,5 +362,128 @@ struct ActiveSetView: View {
         } else {
             timer.stop()
         }
+    }
+}
+
+// MARK: - Numeric edit sheet
+
+enum NumericEditField: Identifiable {
+    case weight(SetLog)
+    case reps(SetLog)
+
+    var id: String {
+        switch self {
+        case .weight(let s): return "w-\(s.id.uuidString)"
+        case .reps(let s):   return "r-\(s.id.uuidString)"
+        }
+    }
+
+    var title: String {
+        switch self {
+        case .weight: return "Weight"
+        case .reps:   return "Reps"
+        }
+    }
+
+    var currentText: String {
+        switch self {
+        case .weight(let s): return GTMath.formatWeight(s.weight)
+        case .reps(let s):   return "\(s.reps)"
+        }
+    }
+
+    var isDecimal: Bool {
+        if case .weight = self { return true }
+        return false
+    }
+}
+
+struct NumericEditSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let field: NumericEditField
+    let unit: String
+    let onSave: () -> Void
+    @State private var text: String = ""
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        ZStack {
+            GT.bg.ignoresSafeArea()
+            VStack(alignment: .leading, spacing: 20) {
+                HStack {
+                    Text(field.title.uppercased())
+                        .gtMonoCaption(size: 11, tracking: 1.5)
+                    Spacer()
+                    Button { dismiss() } label: {
+                        Text("Cancel")
+                            .font(.gtBody(14))
+                            .foregroundColor(GT.ink3)
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                HStack(alignment: .firstTextBaseline, spacing: 10) {
+                    TextField("", text: $text)
+                        .font(.gtDisplay(64, weight: .semibold))
+                        .tracking(-2)
+                        .foregroundColor(GT.ink)
+                        .keyboardType(field.isDecimal ? .decimalPad : .numberPad)
+                        .textFieldStyle(.plain)
+                        .focused($focused)
+                        .onSubmit(commit)
+                    if case .weight = field {
+                        Text(unit)
+                            .font(.gtMono(20))
+                            .foregroundColor(GT.ink3)
+                    } else {
+                        Text("reps")
+                            .font(.gtMono(20))
+                            .foregroundColor(GT.ink3)
+                    }
+                }
+                .padding(.vertical, 10)
+                .overlay(alignment: .bottom) {
+                    Rectangle().fill(GT.line2).frame(height: 1)
+                }
+
+                Button(action: commit) {
+                    Text("Save")
+                        .font(.gtDisplay(16, weight: .bold))
+                        .tracking(-0.2)
+                        .foregroundColor(GT.limeInk)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 52)
+                        .background(Capsule().fill(GT.lime))
+                }
+                .buttonStyle(.plain)
+
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 22)
+            .padding(.top, 16)
+        }
+        .onAppear {
+            text = field.currentText
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                focused = true
+            }
+        }
+    }
+
+    private func commit() {
+        let trimmed = text.trimmingCharacters(in: .whitespaces)
+        switch field {
+        case .weight(let s):
+            if let v = Double(trimmed), v >= 0 {
+                s.weight = v
+                onSave()
+            }
+        case .reps(let s):
+            if let v = Int(trimmed), v > 0, v <= 999 {
+                s.reps = v
+                onSave()
+            }
+        }
+        dismiss()
     }
 }

@@ -3,20 +3,29 @@ import SwiftData
 
 enum SeedLoader {
     private static let didSeedKey = "GymTime.didSeed.v1"
+    private static let didSeedV2Key = "GymTime.didSeed.v2"
 
     static func seedIfNeeded(_ context: ModelContext) {
-        if UserDefaults.standard.bool(forKey: didSeedKey) { return }
-        do {
-            // Settings singleton
-            let existing = try context.fetch(FetchDescriptor<AppSettings>())
-            if existing.isEmpty {
-                context.insert(AppSettings())
+        if !UserDefaults.standard.bool(forKey: didSeedKey) {
+            do {
+                let existing = try context.fetch(FetchDescriptor<AppSettings>())
+                if existing.isEmpty {
+                    context.insert(AppSettings())
+                }
+                seedLibraryAndTemplates(context)
+                try context.save()
+                UserDefaults.standard.set(true, forKey: didSeedKey)
+            } catch {
+                print("Seed v1 failed: \(error)")
             }
-            seedLibraryAndTemplates(context)
-            try context.save()
-            UserDefaults.standard.set(true, forKey: didSeedKey)
-        } catch {
-            print("Seed failed: \(error)")
+        }
+        if !UserDefaults.standard.bool(forKey: didSeedV2Key) {
+            do {
+                try seedV2(context)
+                UserDefaults.standard.set(true, forKey: didSeedV2Key)
+            } catch {
+                print("Seed v2 failed: \(error)")
+            }
         }
     }
 
@@ -100,5 +109,72 @@ enum SeedLoader {
                 context.insert(te)
             }
         }
+    }
+
+    // MARK: - v2 additive seed
+
+    private struct V2Spec {
+        let name: String
+        let muscles: [MuscleGroup]
+        let equipment: Equipment
+        let templates: [String]
+    }
+
+    private static let v2Exercises: [V2Spec] = [
+        V2Spec(name: "Pec Deck",                muscles: [.chest],      equipment: .machine,  templates: ["Push", "Upper"]),
+        V2Spec(name: "Machine Bench Press",     muscles: [.chest],      equipment: .machine,  templates: ["Push", "Upper"]),
+        V2Spec(name: "Close Grip Bench Press",  muscles: [.triceps],    equipment: .barbell,  templates: ["Push", "Upper"]),
+        V2Spec(name: "Seated Cable Pushdown",   muscles: [.triceps],    equipment: .cable,    templates: ["Push", "Upper"]),
+        V2Spec(name: "Machine Dip",             muscles: [.triceps],    equipment: .machine,  templates: ["Push", "Upper"]),
+        V2Spec(name: "Concentration Curls",     muscles: [.biceps],     equipment: .dumbbell, templates: ["Pull", "Upper"]),
+        V2Spec(name: "Machine Preacher Curls",  muscles: [.biceps],     equipment: .machine,  templates: ["Pull", "Upper"]),
+        V2Spec(name: "Reverse Grip Curls",      muscles: [.biceps],     equipment: .cable,    templates: ["Pull", "Upper"]),
+        V2Spec(name: "Leg Lifts",               muscles: [.quads],      equipment: .machine,  templates: ["Legs", "Lower"]),
+        V2Spec(name: "Leg Curls",               muscles: [.hamstrings], equipment: .machine,  templates: ["Legs", "Lower"]),
+        V2Spec(name: "Hip Adduction",           muscles: [.quads],      equipment: .machine,  templates: ["Legs", "Lower"]),
+        V2Spec(name: "Calf Raises",             muscles: [.calves],     equipment: .machine,  templates: ["Legs", "Lower"]),
+        V2Spec(name: "Shoulder Flies",          muscles: [.shoulders],  equipment: .machine,  templates: ["Push", "Upper"]),
+    ]
+
+    private static func seedV2(_ context: ModelContext) throws {
+        let existingExercises = try context.fetch(FetchDescriptor<Exercise>())
+        let byLowerName: [String: Exercise] = Dictionary(
+            existingExercises.map { ($0.name.lowercased(), $0) },
+            uniquingKeysWith: { a, _ in a }
+        )
+        let templates = try context.fetch(FetchDescriptor<WorkoutTemplate>())
+        let templatesByName: [String: WorkoutTemplate] = Dictionary(
+            templates.map { ($0.name, $0) },
+            uniquingKeysWith: { a, _ in a }
+        )
+
+        for spec in v2Exercises {
+            // Find-or-create the exercise (match by case-insensitive name).
+            let exercise: Exercise
+            if let found = byLowerName[spec.name.lowercased()] {
+                exercise = found
+                // Ensure library visibility.
+                if !exercise.isInLibrary { exercise.isInLibrary = true }
+            } else {
+                exercise = Exercise(
+                    name: spec.name,
+                    muscles: spec.muscles,
+                    equipment: spec.equipment,
+                    isInLibrary: true
+                )
+                context.insert(exercise)
+            }
+
+            // Attach to the requested templates if not already present.
+            for templateName in spec.templates {
+                guard let template = templatesByName[templateName] else { continue }
+                let alreadyIn = (template.templateExercises ?? []).contains { $0.exercise?.id == exercise.id }
+                if alreadyIn { continue }
+                let nextOrder = (template.templateExercises ?? []).map(\.order).max().map { $0 + 1 } ?? 0
+                let te = TemplateExercise(template: template, exercise: exercise, order: nextOrder)
+                context.insert(te)
+            }
+        }
+        try context.save()
     }
 }
