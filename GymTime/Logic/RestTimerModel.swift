@@ -1,7 +1,12 @@
 import Foundation
 import Combine
-import UIKit
 import UserNotifications
+#if os(iOS)
+import UIKit
+#endif
+#if os(watchOS)
+import WatchKit
+#endif
 
 @MainActor
 final class RestTimerModel: ObservableObject {
@@ -49,7 +54,6 @@ final class RestTimerModel: ObservableObject {
     func adjust(delta: Int) {
         let new = max(0, plannedSec + delta)
         plannedSec = new
-        // Re-arm fallback with new target
         if isRunning {
             cancelBackgroundFallback()
             let remaining = max(1, new - elapsed)
@@ -73,9 +77,13 @@ final class RestTimerModel: ObservableObject {
 
     private func fireHaptic() {
         guard hapticEnabled else { return }
+        #if os(iOS)
         let gen = UINotificationFeedbackGenerator()
         gen.prepare()
         gen.notificationOccurred(.success)
+        #elseif os(watchOS)
+        WKInterfaceDevice.current().play(.success)
+        #endif
     }
 
     private func scheduleBackgroundFallback(after seconds: Int, hapticOnEnd: Bool) {
@@ -85,7 +93,6 @@ final class RestTimerModel: ObservableObject {
         content.title = "Rest complete"
         content.body = "Set is ready."
         if hapticOnEnd {
-            // Use default sound — iOS pairs .default with a haptic when silent.
             content.sound = .default
         } else {
             content.sound = nil

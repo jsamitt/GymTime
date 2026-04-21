@@ -1,19 +1,19 @@
 import SwiftUI
 import SwiftData
 
-enum PhoneSyncStatus {
+enum SyncStatus {
     case cloudKit
     case localOnly(String)
 }
 
 @MainActor
-final class PhoneSyncStatusHolder: ObservableObject {
-    static let shared = PhoneSyncStatusHolder()
-    @Published var status: PhoneSyncStatus = .cloudKit
+final class SyncStatusHolder: ObservableObject {
+    static let shared = SyncStatusHolder()
+    @Published var status: SyncStatus = .cloudKit
 }
 
 @main
-struct GymTimeApp: App {
+struct GymTimeWatchApp: App {
     let container: ModelContainer
 
     init() {
@@ -26,36 +26,32 @@ struct GymTimeApp: App {
             SetLog.self,
             AppSettings.self,
         ])
-        var initialStatus: PhoneSyncStatus = .cloudKit
+        var initialStatus: SyncStatus = .cloudKit
         let built: ModelContainer
         do {
             let config = ModelConfiguration(schema: schema, cloudKitDatabase: .private("iCloud.com.jsamitt.GymTime"))
             built = try ModelContainer(for: schema, configurations: config)
         } catch {
             let msg = String(describing: error)
-            print("iPhone CloudKit init failed: \(msg)")
+            print("Watch CloudKit init failed: \(msg)")
             initialStatus = .localOnly(msg)
             do {
                 built = try ModelContainer(for: schema)
             } catch {
-                fatalError("Failed to build ModelContainer with CloudKit or local fallback: \(error)")
+                fatalError("Watch local ModelContainer failed: \(error)")
             }
         }
         container = built
         let captured = initialStatus
-        Task { @MainActor in PhoneSyncStatusHolder.shared.status = captured }
-        // Seed + cleanup on first launch
-        Task { @MainActor [container] in
-            SeedLoader.seedIfNeeded(container.mainContext)
-            SessionCleanup.run(container.mainContext)
-            // Notification permission is requested on first LOG SET tap.
+        Task { @MainActor [built] in
+            SyncStatusHolder.shared.status = captured
+            SessionCleanup.run(built.mainContext)
         }
     }
 
     var body: some Scene {
         WindowGroup {
-            RootView()
-                .preferredColorScheme(.dark)
+            WatchRootView()
                 .tint(GT.lime)
         }
         .modelContainer(container)

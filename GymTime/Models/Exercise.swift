@@ -50,6 +50,14 @@ final class Exercise {
     var weightColdOverride: Double = 0
     var weightWarmOverride: Double = 0
 
+    // Inverses required by CloudKit sync — deleting an exercise nullifies
+    // references rather than cascading so history is preserved.
+    @Relationship(deleteRule: .nullify, inverse: \TemplateExercise.exercise)
+    var templateReferences: [TemplateExercise]? = []
+
+    @Relationship(deleteRule: .nullify, inverse: \ExerciseLog.exercise)
+    var logReferences: [ExerciseLog]? = []
+
     init(
         name: String,
         muscles: [MuscleGroup],

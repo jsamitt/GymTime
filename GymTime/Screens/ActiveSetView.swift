@@ -10,6 +10,7 @@ struct ActiveSetView: View {
     let onClose: () -> Void
 
     @State private var editingField: NumericEditField?
+    @State private var showExitConfirm = false
 
     private var cursor: (ExerciseLog, Int)? {
         controller.activeCursor()
@@ -52,6 +53,19 @@ struct ActiveSetView: View {
             .presentationDetents([.fraction(0.35), .medium])
             .presentationDragIndicator(.visible)
         }
+        .confirmationDialog("Exit workout?", isPresented: $showExitConfirm, titleVisibility: .visible) {
+            Button("Save & Exit") {
+                controller.save()
+                onClose()
+            }
+            Button("Exit Without Saving", role: .destructive) {
+                controller.abandon()
+                onClose()
+            }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("Save progress to resume later, or discard this workout entirely.")
+        }
     }
 
     // MARK: - Live screen
@@ -65,7 +79,7 @@ struct ActiveSetView: View {
         VStack(spacing: 0) {
             // Header
             HStack {
-                iconCircle("chevron.down") { onClose() }
+                iconCircle("chevron.down") { showExitConfirm = true }
                 Spacer()
                 VStack(spacing: 2) {
                     Text("\(session.templateName.uppercased()) · \(setPosition)")

@@ -8,9 +8,16 @@ struct HomeView: View {
     @Query private var settingsList: [AppSettings]
 
     @State private var activeTemplate: WorkoutTemplate?
+    @State private var resumingSession: Session?
 
     private var primary: [WorkoutTemplate] { Array(templates.prefix(3)) }
     private var alternate: [WorkoutTemplate] { Array(templates.dropFirst(3)) }
+
+    private var activeSession: Session? {
+        sessions
+            .filter { $0.finishedAt == nil }
+            .max(by: { $0.startedAt < $1.startedAt })
+    }
 
     var body: some View {
         ZStack {
@@ -18,6 +25,14 @@ struct HomeView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     header
+
+                    if let s = activeSession {
+                        Button { resumingSession = s } label: {
+                            resumeBanner(for: s)
+                        }
+                        .buttonStyle(.plain)
+                        .padding(.top, 16)
+                    }
 
                     // Stats row
                     HStack(spacing: 10) {
@@ -83,6 +98,34 @@ struct HomeView: View {
         .fullScreenCover(item: $activeTemplate) { t in
             WorkoutDetailView(template: t) { activeTemplate = nil }
         }
+        .fullScreenCover(item: $resumingSession) { s in
+            ActiveSessionContainer(session: s)
+        }
+    }
+
+    private func resumeBanner(for session: Session) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: "play.circle.fill")
+                .font(.system(size: 28))
+                .foregroundColor(GT.limeInk)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("WORKOUT IN PROGRESS")
+                    .font(.gtMono(10, weight: .semibold))
+                    .tracking(1.4)
+                    .foregroundColor(GT.limeInk.opacity(0.7))
+                Text(session.templateName)
+                    .font(.gtDisplay(18, weight: .semibold))
+                    .foregroundColor(GT.limeInk)
+            }
+            Spacer()
+            Text("RESUME →")
+                .font(.gtMono(11, weight: .bold))
+                .tracking(1.0)
+                .foregroundColor(GT.limeInk)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 14)
+        .background(RoundedRectangle(cornerRadius: GT.rLg).fill(GT.lime))
     }
 
     private var header: some View {

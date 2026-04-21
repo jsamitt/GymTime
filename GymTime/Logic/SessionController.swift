@@ -85,6 +85,12 @@ final class SessionController: ObservableObject {
         try? context.save()
     }
 
+    /// Delete the session entirely (cascades to ExerciseLogs and SetLogs).
+    func abandon() {
+        context.delete(session)
+        try? context.save()
+    }
+
     /// Persist ad-hoc edits to attached models (e.g. mutating a SetLog's weight
     /// from the UI). SetLog is managed by SwiftData; this flushes the change.
     func save() {

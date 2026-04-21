@@ -200,6 +200,7 @@ struct WorkoutDetailView: View {
     }
 
     private func startWorkout() {
+        SessionCleanup.finishAllActive(context)
         let s = Session(templateName: template.name)
         context.insert(s)
         for (i, ex) in exercises.enumerated() {

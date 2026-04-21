@@ -3,6 +3,7 @@ options:
   bundleIdPrefix: com.jsamitt
   deploymentTarget:
     iOS: "17.0"
+    watchOS: "10.0"
   xcodeVersion: "15.0"
   createIntermediateGroups: true
 settings:
@@ -20,6 +21,9 @@ targets:
     deploymentTarget: "17.0"
     sources:
       - path: GymTime
+        excludes:
+          - "GymTime.entitlements"
+          - "Info.plist"
     resources:
       - path: GymTime/Resources
     info:
@@ -44,9 +48,74 @@ targets:
           - JetBrainsMono-Medium.ttf
           - JetBrainsMono-SemiBold.ttf
         NSUserNotificationUsageDescription: "GymTime uses notifications so your rest-timer buzz still fires when the screen is off."
+        UIBackgroundModes:
+          - remote-notification
+    entitlements:
+      path: GymTime/GymTime.entitlements
+      properties:
+        com.apple.developer.icloud-container-identifiers:
+          - iCloud.com.jsamitt.GymTime
+        com.apple.developer.icloud-services:
+          - CloudKit
+        aps-environment: development
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.jsamitt.GymTime
         GENERATE_INFOPLIST_FILE: NO
         TARGETED_DEVICE_FAMILY: "1"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+    dependencies:
+      - target: GymTimeWatch
+        embed: true
+  GymTimeWatch:
+    type: application
+    platform: watchOS
+    deploymentTarget: "10.0"
+    sources:
+      # watchOS-specific code
+      - path: GymTimeWatch
+      # Shared models and cross-platform logic
+      - path: GymTime/Models
+      - path: GymTime/Logic/Math.swift
+      - path: GymTime/Logic/RestTimerModel.swift
+      - path: GymTime/Logic/SessionCleanup.swift
+      - path: GymTime/DesignSystem/GT.swift
+    resources:
+      - path: GymTimeWatch/Assets.xcassets
+      - path: GymTime/Resources
+    info:
+      path: GymTimeWatch/Info.plist
+      properties:
+        CFBundleDisplayName: GymTime
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        WKApplication: true
+        WKWatchOnly: false
+        WKCompanionAppBundleIdentifier: com.jsamitt.GymTime
+        UIAppFonts:
+          - InterTight-Regular.ttf
+          - InterTight-Medium.ttf
+          - InterTight-SemiBold.ttf
+          - InterTight-Bold.ttf
+          - Inter-Regular.ttf
+          - Inter-Medium.ttf
+          - Inter-SemiBold.ttf
+          - JetBrainsMono-Regular.ttf
+          - JetBrainsMono-Medium.ttf
+          - JetBrainsMono-SemiBold.ttf
+        NSUserNotificationUsageDescription: "GymTime uses notifications so your rest-timer buzz still fires when the screen is off."
+    entitlements:
+      path: GymTimeWatch/GymTimeWatch.entitlements
+      properties:
+        com.apple.developer.icloud-container-identifiers:
+          - iCloud.com.jsamitt.GymTime
+        com.apple.developer.icloud-services:
+          - CloudKit
+        aps-environment: development
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.jsamitt.GymTime.watchkitapp
+        GENERATE_INFOPLIST_FILE: NO
+        TARGETED_DEVICE_FAMILY: "4"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        SUPPORTS_MACCATALYST: NO

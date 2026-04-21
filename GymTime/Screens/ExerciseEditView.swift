@@ -8,6 +8,8 @@ struct ExerciseEditView: View {
     @Query(sort: \WorkoutTemplate.order) private var templates: [WorkoutTemplate]
     @Bindable var exercise: Exercise
 
+    @State private var editingWeight = false
+
     private var settings: AppSettings { settingsList.first ?? AppSettings() }
 
     // MARK: - Derived
@@ -176,6 +178,21 @@ struct ExerciseEditView: View {
                 .padding(.top, 10)
             }
         }
+        .sheet(isPresented: $editingWeight) {
+            NumberTypeSheet(
+                title: "Top Working Weight",
+                unit: settings.units.rawValue,
+                isDecimal: true,
+                initial: GTMath.formatWeight(exercise.topWorkingWeight)
+            ) { text in
+                if let v = Double(text.trimmingCharacters(in: .whitespaces)), v >= 0 {
+                    exercise.topWorkingWeight = v
+                    try? context.save()
+                }
+            }
+            .presentationDetents([.fraction(0.35), .medium])
+            .presentationDragIndicator(.visible)
+        }
     }
 
     // MARK: - Chip blocks
@@ -219,19 +236,23 @@ struct ExerciseEditView: View {
     private var weightCard: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("TOP WORKING WEIGHT")
-                        .gtMonoCaption(size: 10, tracking: 1.3)
-                    HStack(alignment: .firstTextBaseline, spacing: 4) {
-                        Text(GTMath.formatWeight(exercise.topWorkingWeight))
-                            .font(.gtDisplay(32, weight: .semibold))
-                            .tracking(-1)
-                            .foregroundColor(GT.ink)
-                        Text(settings.units.rawValue)
-                            .font(.gtMono(13))
-                            .foregroundColor(GT.ink3)
+                Button { editingWeight = true } label: {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("TOP WORKING WEIGHT")
+                            .gtMonoCaption(size: 10, tracking: 1.3)
+                        HStack(alignment: .firstTextBaseline, spacing: 4) {
+                            Text(GTMath.formatWeight(exercise.topWorkingWeight))
+                                .font(.gtDisplay(32, weight: .semibold))
+                                .tracking(-1)
+                                .foregroundColor(GT.ink)
+                            Text(settings.units.rawValue)
+                                .font(.gtMono(13))
+                                .foregroundColor(GT.ink3)
+                        }
                     }
+                    .contentShape(Rectangle())
                 }
+                .buttonStyle(.plain)
                 Spacer()
                 GTStepper(
                     value: GTMath.formatWeight(exercise.topWorkingWeight),
