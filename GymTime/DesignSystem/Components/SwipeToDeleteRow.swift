@@ -5,8 +5,12 @@ import SwiftUI
 /// the button to invoke `onDelete` (the caller is responsible for presenting
 /// a confirmation dialog). Tap the card itself to invoke `onTap`.
 ///
-/// Use this wherever a swipe gesture is expected but the surrounding layout
-/// is a custom card-based VStack rather than a `List`.
+/// Crucially, the card is NOT wrapped in a SwiftUI Button — Button eagerly
+/// grabs the touch and prevents the DragGesture from firing for horizontal
+/// swipes. Instead we attach a `TapGesture` at the ZStack level, which
+/// composes cleanly with the DragGesture: vertical scroll still works (parent
+/// scroll view wins), horizontal drag on the row triggers the swipe, and a
+/// plain tap triggers `onTap`.
 struct SwipeToDeleteRow<Content: View>: View {
     let onTap: () -> Void
     let onDelete: () -> Void
@@ -20,7 +24,7 @@ struct SwipeToDeleteRow<Content: View>: View {
 
     var body: some View {
         ZStack(alignment: .trailing) {
-            // Delete action background (revealed beneath the card)
+            // Red "Delete" action revealed beneath the card.
             HStack {
                 Spacer()
                 Button {
@@ -47,49 +51,55 @@ struct SwipeToDeleteRow<Content: View>: View {
             }
             .clipShape(RoundedRectangle(cornerRadius: GT.rMd))
 
-            Button(action: {
-                if committed {
-                    withAnimation(.spring(duration: 0.25)) {
-                        offset = 0
-                        committed = false
-                    }
-                } else {
-                    onTap()
-                }
-            }) {
-                content()
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .background(GT.bg) // covers the red background when offset is 0
-            .offset(x: offset)
-            .gesture(
-                DragGesture(minimumDistance: 12)
-                    .onChanged { v in
-                        let h = v.translation.width
-                        if h < 0 {
-                            offset = max(h, -revealWidth * 1.2)
-                        } else if committed {
-                            offset = min(0, -revealWidth + h)
-                        }
-                    }
-                    .onEnded { _ in
+            // Foreground card content. Uses a plain view + tap gesture so
+            // the simultaneous drag gesture below can win when the finger
+            // moves horizontally.
+            content()
+                .contentShape(Rectangle())
+                .background(GT.bg)
+                .offset(x: offset)
+                .onTapGesture {
+                    if committed {
                         withAnimation(.spring(duration: 0.25)) {
-                            if offset < -deleteThreshold {
-                                offset = -revealWidth
-                                committed = true
-                            } else {
-                                offset = 0
-                                committed = false
+                            offset = 0
+                            committed = false
+                        }
+                    } else {
+                        onTap()
+                    }
+                }
+                .simultaneousGesture(
+                    DragGesture(minimumDistance: 12, coordinateSpace: .local)
+                        .onChanged { v in
+                            // Only steal the touch for mostly-horizontal drags so
+                            // vertical scrolling in the parent still works.
+                            let h = v.translation.width
+                            let vY = v.translation.height
+                            guard abs(h) > abs(vY) else { return }
+                            if h < 0 {
+                                offset = max(h, -revealWidth * 1.2)
+                            } else if committed {
+                                offset = min(0, -revealWidth + h)
                             }
                         }
-                    }
-            )
+                        .onEnded { _ in
+                            withAnimation(.spring(duration: 0.25)) {
+                                if offset < -deleteThreshold {
+                                    offset = -revealWidth
+                                    committed = true
+                                } else {
+                                    offset = 0
+                                    committed = false
+                                }
+                            }
+                        }
+                )
         }
     }
 }
 
-/// Convenience wrapper for HistoryView's session rows.
+/// Convenience wrapper for HistoryView's session rows. Kept as a thin alias
+/// so calls in HistoryView don't need to pass unrelated type parameters.
 struct SessionSwipeRow<Content: View>: View {
     let session: Session
     let onTap: () -> Void

@@ -23,6 +23,46 @@ struct RoutinesPane: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
+            contentBody
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .sheet(isPresented: $showCreateSheet) {
+            RoutineCreateSheet()
+        }
+        .sheet(item: $openingTemplate) { t in
+            WorkoutDetailView(template: t) { openingTemplate = nil }
+        }
+        .alert("Clone routine", isPresented: .constant(cloneSource != nil), presenting: cloneSource) { src in
+            TextField("Name", text: $cloneName)
+            Button("Clone") {
+                performClone(source: src, name: cloneName)
+                cloneSource = nil
+            }
+            Button("Cancel", role: .cancel) {
+                cloneSource = nil
+            }
+        } message: { src in
+            Text("Create a variant of \(src.name). You can modify its exercises afterward.")
+        }
+        .confirmationDialog(
+            "Delete this routine?",
+            isPresented: .constant(pendingDelete != nil),
+            titleVisibility: .visible,
+            presenting: pendingDelete
+        ) { t in
+            Button("Delete", role: .destructive) {
+                deleteTemplate(t)
+                pendingDelete = nil
+            }
+            Button("Cancel", role: .cancel) { pendingDelete = nil }
+        } message: { t in
+            Text("\(t.name) · \(t.orderedExercises.count) exercises. Past sessions using this routine will stay in History. This can't be undone.")
+        }
+    }
+
+    @ViewBuilder
+    private var contentBody: some View {
+        VStack(alignment: .leading, spacing: 10) {
             // Action bar
             HStack(spacing: 10) {
                 Button { showCreateSheet = true } label: {
@@ -110,38 +150,6 @@ struct RoutinesPane: View {
                     .padding(.top, 4)
                 }
             }
-        }
-        .sheet(isPresented: $showCreateSheet) {
-            RoutineCreateSheet()
-        }
-        .sheet(item: $openingTemplate) { t in
-            WorkoutDetailView(template: t) { openingTemplate = nil }
-        }
-        .alert("Clone routine", isPresented: .constant(cloneSource != nil), presenting: cloneSource) { src in
-            TextField("Name", text: $cloneName)
-            Button("Clone") {
-                performClone(source: src, name: cloneName)
-                cloneSource = nil
-            }
-            Button("Cancel", role: .cancel) {
-                cloneSource = nil
-            }
-        } message: { src in
-            Text("Create a variant of \(src.name). You can modify its exercises afterward.")
-        }
-        .confirmationDialog(
-            "Delete this routine?",
-            isPresented: .constant(pendingDelete != nil),
-            titleVisibility: .visible,
-            presenting: pendingDelete
-        ) { t in
-            Button("Delete", role: .destructive) {
-                deleteTemplate(t)
-                pendingDelete = nil
-            }
-            Button("Cancel", role: .cancel) { pendingDelete = nil }
-        } message: { t in
-            Text("\(t.name) · \(t.orderedExercises.count) exercises. Past sessions using this routine will stay in History. This can't be undone.")
         }
     }
 

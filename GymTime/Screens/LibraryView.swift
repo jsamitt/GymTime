@@ -27,24 +27,37 @@ struct LibraryView: View {
             VStack(alignment: .leading, spacing: 0) {
                 titleRow
 
+                // Routines drawer above, Exercises drawer below. The open
+                // pane claims all remaining vertical space so its inner
+                // ScrollView has a definite height to scroll within.
                 VStack(spacing: 12) {
-                    drawer(
+                    drawerHeader(
                         .routines,
                         title: "Routines",
                         summary: "\(allTemplates.count) saved",
                         icon: "list.bullet.rectangle.portrait"
                     )
-                    drawer(
+                    if openDrawer == .routines {
+                        RoutinesPane()
+                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                            .transition(.opacity)
+                    }
+
+                    drawerHeader(
                         .exercises,
                         title: "Exercises",
                         summary: "\(allExercises.count) total",
                         icon: "square.grid.2x2"
                     )
+                    if openDrawer == .exercises {
+                        ExercisesPane()
+                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                            .transition(.opacity)
+                    }
                 }
                 .padding(.horizontal, 20)
                 .padding(.top, 16)
-
-                Spacer(minLength: 0)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             }
         }
     }
@@ -66,59 +79,45 @@ struct LibraryView: View {
     }
 
     @ViewBuilder
-    private func drawer(_ d: Drawer, title: String, summary: String, icon: String) -> some View {
+    private func drawerHeader(_ d: Drawer, title: String, summary: String, icon: String) -> some View {
         let isOpen = openDrawer == d
-
-        VStack(spacing: 0) {
-            Button {
-                setDrawer(d)
-            } label: {
-                HStack(spacing: 12) {
-                    Image(systemName: icon)
-                        .font(.system(size: 16, weight: .medium))
+        Button {
+            setDrawer(d)
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: icon)
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundColor(isOpen ? GT.lime : GT.ink2)
+                    .frame(width: 28)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title.uppercased())
+                        .font(.gtMono(11, weight: .semibold))
+                        .tracking(1.2)
                         .foregroundColor(isOpen ? GT.lime : GT.ink2)
-                        .frame(width: 28)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(title.uppercased())
-                            .font(.gtMono(11, weight: .semibold))
-                            .tracking(1.2)
-                            .foregroundColor(isOpen ? GT.lime : GT.ink2)
-                        if !isOpen {
-                            Text(summary)
-                                .font(.gtBody(12))
-                                .foregroundColor(GT.ink3)
-                        }
-                    }
-                    Spacer()
-                    Image(systemName: isOpen ? "chevron.up" : "chevron.down")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundColor(GT.ink3)
-                }
-                .padding(.horizontal, 14)
-                .padding(.vertical, isOpen ? 10 : 14)
-                .frame(maxWidth: .infinity)
-                .background(
-                    RoundedRectangle(cornerRadius: GT.rMd)
-                        .fill(isOpen ? GT.limeWashSoft : GT.surface)
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: GT.rMd)
-                        .stroke(isOpen ? GT.limeEdge : GT.line, lineWidth: 1)
-                )
-            }
-            .buttonStyle(.plain)
-
-            if isOpen {
-                Group {
-                    switch d {
-                    case .routines: RoutinesPane()
-                    case .exercises: ExercisesPane()
+                    if !isOpen {
+                        Text(summary)
+                            .font(.gtBody(12))
+                            .foregroundColor(GT.ink3)
                     }
                 }
-                .frame(maxWidth: .infinity)
-                .transition(.opacity.combined(with: .move(edge: .top)))
+                Spacer()
+                Image(systemName: isOpen ? "chevron.up" : "chevron.down")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(GT.ink3)
             }
+            .padding(.horizontal, 14)
+            .padding(.vertical, isOpen ? 10 : 14)
+            .frame(maxWidth: .infinity)
+            .background(
+                RoundedRectangle(cornerRadius: GT.rMd)
+                    .fill(isOpen ? GT.limeWashSoft : GT.surface)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: GT.rMd)
+                    .stroke(isOpen ? GT.limeEdge : GT.line, lineWidth: 1)
+            )
         }
+        .buttonStyle(.plain)
     }
 }
 
@@ -200,6 +199,7 @@ struct ExercisesPane: View {
                 .padding(.top, 6)
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .sheet(item: $editing) { ex in
             ExerciseEditView(exercise: ex)
         }
