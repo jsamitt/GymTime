@@ -5,13 +5,17 @@ struct WorkoutDetailView: View {
     @Environment(\.modelContext) private var context
     @Query private var settingsList: [AppSettings]
 
-    let template: WorkoutTemplate
+    @Bindable var template: WorkoutTemplate
     let onClose: () -> Void
 
     @State private var activeSession: Session?
     @State private var editingExercise: Exercise?
     @State private var showAddExercise: Bool = false
     @State private var editMode: EditMode = .inactive
+    @State private var editingName: Bool = false
+    @State private var editingSubtitle: Bool = false
+    @FocusState private var nameFocused: Bool
+    @FocusState private var subtitleFocused: Bool
 
     private var settings: AppSettings {
         settingsList.first ?? AppSettings()
@@ -79,13 +83,54 @@ struct WorkoutDetailView: View {
                 .padding(.bottom, 20)
 
                 VStack(alignment: .leading, spacing: 6) {
-                    Text(template.name)
-                        .font(.gtDisplay(40, weight: .semibold))
-                        .tracking(-1.4)
-                        .foregroundColor(GT.ink)
-                    Text(template.subtitle)
+                    // Name — tap to edit
+                    if editingName {
+                        TextField("", text: $template.name)
+                            .font(.gtDisplay(40, weight: .semibold))
+                            .tracking(-1.4)
+                            .foregroundColor(GT.ink)
+                            .textInputAutocapitalization(.words)
+                            .focused($nameFocused)
+                            .submitLabel(.done)
+                            .onSubmit { commitName() }
+                            .onChange(of: nameFocused) { _, focused in
+                                if !focused { commitName() }
+                            }
+                    } else {
+                        Button { beginEditingName() } label: {
+                            Text(template.name)
+                                .font(.gtDisplay(40, weight: .semibold))
+                                .tracking(-1.4)
+                                .foregroundColor(GT.ink)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+
+                    // Subtitle — tap to edit
+                    if editingSubtitle {
+                        TextField("", text: $template.subtitle, prompt:
+                            Text("Describe the focus").foregroundColor(GT.ink3)
+                        )
                         .font(.gtBody(14))
                         .foregroundColor(GT.ink2)
+                        .focused($subtitleFocused)
+                        .submitLabel(.done)
+                        .onSubmit { commitSubtitle() }
+                        .onChange(of: subtitleFocused) { _, focused in
+                            if !focused { commitSubtitle() }
+                        }
+                    } else {
+                        Button { beginEditingSubtitle() } label: {
+                            Text(template.subtitle.isEmpty ? "Add description" : template.subtitle)
+                                .font(.gtBody(14))
+                                .foregroundColor(template.subtitle.isEmpty ? GT.ink3 : GT.ink2)
+                                .italic(template.subtitle.isEmpty)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+
                     HStack(spacing: 16) {
                         Text("\(exercises.count) EXERCISES")
                         Text("~\(estimatedMinutes) MIN")
@@ -197,6 +242,36 @@ struct WorkoutDetailView: View {
                 .foregroundColor(GT.ink)
         }
         .buttonStyle(.plain)
+    }
+
+    private func beginEditingName() {
+        editingName = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+            nameFocused = true
+        }
+    }
+
+    private func commitName() {
+        let trimmed = template.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty { template.name = "Untitled" }
+        else { template.name = trimmed }
+        try? context.save()
+        editingName = false
+        nameFocused = false
+    }
+
+    private func beginEditingSubtitle() {
+        editingSubtitle = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+            subtitleFocused = true
+        }
+    }
+
+    private func commitSubtitle() {
+        template.subtitle = template.subtitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        try? context.save()
+        editingSubtitle = false
+        subtitleFocused = false
     }
 
     private func startWorkout() {

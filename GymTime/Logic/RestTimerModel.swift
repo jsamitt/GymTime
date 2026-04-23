@@ -15,7 +15,7 @@ final class RestTimerModel: ObservableObject {
     @Published private(set) var plannedSec: Int = 0
     @Published private(set) var didFire: Bool = false
 
-    private var startDate: Date?
+    private(set) var startDate: Date?
     private var timer: Timer?
     private var hapticEnabled: Bool = true
     private var pendingNotificationId: String?

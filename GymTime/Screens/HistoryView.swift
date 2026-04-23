@@ -2,7 +2,10 @@ import SwiftUI
 import SwiftData
 
 struct HistoryView: View {
+    @Environment(\.modelContext) private var context
     @Query(sort: \Session.startedAt, order: .reverse) private var sessions: [Session]
+    @State private var selectedSession: Session?
+    @State private var pendingDelete: Session?
 
     private var finished: [Session] { sessions.filter { $0.finishedAt != nil } }
 
@@ -37,7 +40,13 @@ struct HistoryView: View {
                         .padding(.bottom, 10)
                     VStack(spacing: 8) {
                         ForEach(finished) { s in
-                            sessionRow(s)
+                            SessionSwipeRow(session: s) {
+                                selectedSession = s
+                            } onDelete: {
+                                pendingDelete = s
+                            } content: {
+                                sessionRow(s)
+                            }
                         }
                         if finished.isEmpty {
                             emptyState
@@ -49,6 +58,24 @@ struct HistoryView: View {
                 .padding(.horizontal, 20)
                 .padding(.top, 10)
             }
+        }
+        .sheet(item: $selectedSession) { s in
+            SessionDetailView(session: s)
+        }
+        .confirmationDialog(
+            "Delete this session?",
+            isPresented: .constant(pendingDelete != nil),
+            titleVisibility: .visible,
+            presenting: pendingDelete
+        ) { s in
+            Button("Delete", role: .destructive) {
+                context.delete(s)
+                try? context.save()
+                pendingDelete = nil
+            }
+            Button("Cancel", role: .cancel) { pendingDelete = nil }
+        } message: { s in
+            Text("\(s.templateName) · \(GTMath.formatVolume(s.totalVolume)) lb. This can't be undone.")
         }
     }
 
@@ -100,9 +127,14 @@ struct HistoryView: View {
             Rectangle().fill(GT.line).frame(width: 1, height: 32)
             VStack(alignment: .leading, spacing: 2) {
                 Text(s.templateName).font(.gtDisplay(15, weight: .semibold)).foregroundColor(GT.ink)
-                Text("\(GTMath.formatVolume(s.totalVolume)) lb").font(.gtMono(11)).foregroundColor(GT.ink3)
+                Text("\(s.orderedLogs.count) ex · \(GTMath.formatVolume(s.totalVolume)) lb")
+                    .font(.gtMono(11))
+                    .foregroundColor(GT.ink3)
             }
             Spacer()
+            Image(systemName: "chevron.right")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundColor(GT.ink3)
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 12)

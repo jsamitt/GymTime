@@ -1,17 +1,6 @@
 import SwiftUI
 import SwiftData
 
-enum PhoneSyncStatus {
-    case cloudKit
-    case localOnly(String)
-}
-
-@MainActor
-final class PhoneSyncStatusHolder: ObservableObject {
-    static let shared = PhoneSyncStatusHolder()
-    @Published var status: PhoneSyncStatus = .cloudKit
-}
-
 @main
 struct GymTimeApp: App {
     let container: ModelContainer
@@ -26,15 +15,14 @@ struct GymTimeApp: App {
             SetLog.self,
             AppSettings.self,
         ])
-        var initialStatus: PhoneSyncStatus = .cloudKit
+        // SwiftData + CloudKit private sync. Falls back to a local-only store
+        // if CloudKit init fails (e.g. fresh simulator with no Apple ID).
         let built: ModelContainer
         do {
             let config = ModelConfiguration(schema: schema, cloudKitDatabase: .private("iCloud.com.jsamitt.GymTime"))
             built = try ModelContainer(for: schema, configurations: config)
         } catch {
-            let msg = String(describing: error)
-            print("iPhone CloudKit init failed: \(msg)")
-            initialStatus = .localOnly(msg)
+            print("iPhone CloudKit init failed: \(error)")
             do {
                 built = try ModelContainer(for: schema)
             } catch {
@@ -42,8 +30,6 @@ struct GymTimeApp: App {
             }
         }
         container = built
-        let captured = initialStatus
-        Task { @MainActor in PhoneSyncStatusHolder.shared.status = captured }
         // Seed + cleanup on first launch
         Task { @MainActor [container] in
             SeedLoader.seedIfNeeded(container.mainContext)

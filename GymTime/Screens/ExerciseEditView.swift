@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import Charts
 
 struct ExerciseEditView: View {
     @Environment(\.dismiss) private var dismiss
@@ -114,6 +115,13 @@ struct ExerciseEditView: View {
                     // Top working weight card
                     weightCard
                         .padding(.top, 22)
+
+                    // Trend
+                    Text("PROGRESS · LOADING SET")
+                        .gtMonoCaption(size: 11, tracking: 1.5)
+                        .padding(.top, 22)
+                        .padding(.bottom, 10)
+                    trendCard
 
                     // Warmup weight overrides
                     Text("WARMUP WEIGHTS")
@@ -293,6 +301,110 @@ struct ExerciseEditView: View {
         }
         .padding(16)
         .gtCard(radius: GT.rLg)
+    }
+
+    // MARK: - Trend
+
+    private struct TrendPoint: Identifiable {
+        let id: UUID
+        let date: Date
+        let weight: Double
+        let reps: Int
+    }
+
+    private var trendPoints: [TrendPoint] {
+        let refs = exercise.logReferences ?? []
+        let points: [TrendPoint] = refs.compactMap { log in
+            guard let session = log.session, session.finishedAt != nil else { return nil }
+            let finalLoad = log.orderedSets
+                .filter { $0.kind == .load && $0.loggedAt != nil && !$0.skipped }
+                .last
+            guard let set = finalLoad, set.weight > 0 else { return nil }
+            return TrendPoint(id: set.id, date: session.startedAt, weight: set.weight, reps: set.reps)
+        }
+        return points.sorted { $0.date < $1.date }.suffix(12)
+    }
+
+    @ViewBuilder
+    private var trendCard: some View {
+        let pts = trendPoints
+        if pts.count < 2 {
+            HStack {
+                Image(systemName: "chart.line.uptrend.xyaxis")
+                    .foregroundColor(GT.ink3)
+                Text(pts.count == 0
+                     ? "No sessions yet — log a workout to see trend."
+                     : "Log one more session to see the trend line.")
+                    .font(.gtMono(11))
+                    .foregroundColor(GT.ink3)
+                Spacer()
+            }
+            .padding(14)
+            .gtCard(radius: GT.rMd)
+        } else {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    Text("Weight × reps, last \(pts.count) sessions")
+                        .font(.gtMono(10))
+                        .tracking(0.8)
+                        .foregroundColor(GT.ink3)
+                    Spacer()
+                    if let last = pts.last {
+                        Text("\(GTMath.formatWeight(last.weight)) × \(last.reps)")
+                            .font(.gtMono(11, weight: .medium))
+                            .foregroundColor(GT.lime)
+                    }
+                }
+
+                Chart(pts) { p in
+                    LineMark(
+                        x: .value("Date", p.date),
+                        y: .value("Weight", p.weight)
+                    )
+                    .foregroundStyle(GT.lime)
+                    .interpolationMethod(.monotone)
+                    .lineStyle(StrokeStyle(lineWidth: 2))
+
+                    PointMark(
+                        x: .value("Date", p.date),
+                        y: .value("Weight", p.weight)
+                    )
+                    .foregroundStyle(GT.lime)
+                    .symbolSize(38)
+
+                    AreaMark(
+                        x: .value("Date", p.date),
+                        y: .value("Weight", p.weight)
+                    )
+                    .foregroundStyle(
+                        .linearGradient(
+                            colors: [GT.lime.opacity(0.18), .clear],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
+                    .interpolationMethod(.monotone)
+                }
+                .chartYAxis {
+                    AxisMarks(position: .leading, values: .automatic(desiredCount: 3)) { _ in
+                        AxisGridLine().foregroundStyle(GT.line2)
+                        AxisValueLabel()
+                            .font(.gtMono(9))
+                            .foregroundStyle(GT.ink3)
+                    }
+                }
+                .chartXAxis {
+                    AxisMarks(values: .automatic(desiredCount: 4)) { _ in
+                        AxisValueLabel(format: .dateTime.month(.abbreviated).day())
+                            .font(.gtMono(9))
+                            .foregroundStyle(GT.ink3)
+                    }
+                }
+                .frame(height: 130)
+            }
+            .padding(14)
+            .gtCard(radius: GT.rMd)
+        }
     }
 
     // MARK: - Warmup weight card

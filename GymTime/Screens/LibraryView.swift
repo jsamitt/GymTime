@@ -1,7 +1,130 @@
 import SwiftUI
 import SwiftData
 
+/// Library tab with two expandable drawers: Routines and Exercises. Only one
+/// drawer is open at a time; the last-opened drawer is remembered across
+/// launches via `@AppStorage`.
 struct LibraryView: View {
+    enum Drawer: String { case routines, exercises }
+    @AppStorage("libraryOpenDrawer") private var openDrawerRaw: String = Drawer.exercises.rawValue
+
+    @Query(sort: \Exercise.name) private var allExercises: [Exercise]
+    @Query(sort: \WorkoutTemplate.order) private var allTemplates: [WorkoutTemplate]
+
+    private var openDrawer: Drawer {
+        get { Drawer(rawValue: openDrawerRaw) ?? .exercises }
+    }
+
+    private func setDrawer(_ d: Drawer) {
+        withAnimation(.easeOut(duration: 0.2)) {
+            openDrawerRaw = d.rawValue
+        }
+    }
+
+    var body: some View {
+        ZStack {
+            GT.bg.ignoresSafeArea()
+            VStack(alignment: .leading, spacing: 0) {
+                titleRow
+
+                VStack(spacing: 12) {
+                    drawer(
+                        .routines,
+                        title: "Routines",
+                        summary: "\(allTemplates.count) saved",
+                        icon: "list.bullet.rectangle.portrait"
+                    )
+                    drawer(
+                        .exercises,
+                        title: "Exercises",
+                        summary: "\(allExercises.count) total",
+                        icon: "square.grid.2x2"
+                    )
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, 16)
+
+                Spacer(minLength: 0)
+            }
+        }
+    }
+
+    private var titleRow: some View {
+        HStack(alignment: .bottom) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("LIBRARY")
+                    .gtMonoCaption(size: 11, tracking: 1.4)
+                Text("Your gear")
+                    .font(.gtDisplay(34, weight: .semibold))
+                    .tracking(-1)
+                    .foregroundColor(GT.ink)
+            }
+            Spacer()
+        }
+        .padding(.horizontal, 20)
+        .padding(.top, 10)
+    }
+
+    @ViewBuilder
+    private func drawer(_ d: Drawer, title: String, summary: String, icon: String) -> some View {
+        let isOpen = openDrawer == d
+
+        VStack(spacing: 0) {
+            Button {
+                setDrawer(d)
+            } label: {
+                HStack(spacing: 12) {
+                    Image(systemName: icon)
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundColor(isOpen ? GT.lime : GT.ink2)
+                        .frame(width: 28)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(title.uppercased())
+                            .font(.gtMono(11, weight: .semibold))
+                            .tracking(1.2)
+                            .foregroundColor(isOpen ? GT.lime : GT.ink2)
+                        if !isOpen {
+                            Text(summary)
+                                .font(.gtBody(12))
+                                .foregroundColor(GT.ink3)
+                        }
+                    }
+                    Spacer()
+                    Image(systemName: isOpen ? "chevron.up" : "chevron.down")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(GT.ink3)
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, isOpen ? 10 : 14)
+                .frame(maxWidth: .infinity)
+                .background(
+                    RoundedRectangle(cornerRadius: GT.rMd)
+                        .fill(isOpen ? GT.limeWashSoft : GT.surface)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: GT.rMd)
+                        .stroke(isOpen ? GT.limeEdge : GT.line, lineWidth: 1)
+                )
+            }
+            .buttonStyle(.plain)
+
+            if isOpen {
+                Group {
+                    switch d {
+                    case .routines: RoutinesPane()
+                    case .exercises: ExercisesPane()
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+        }
+    }
+}
+
+// MARK: - Exercises pane (extracted from original LibraryView)
+
+struct ExercisesPane: View {
     @Environment(\.modelContext) private var context
     @Query(sort: \Exercise.name) private var exercises: [Exercise]
     @Query private var settingsList: [AppSettings]
@@ -17,7 +140,6 @@ struct LibraryView: View {
             let matchesFilter = activeFilter == nil || ex.muscleGroups.contains(activeFilter!)
             return matchesSearch && matchesFilter
         }
-        // Group by primary muscle, preserve order
         let ordered: [MuscleGroup] = [.chest, .back, .shoulders, .triceps, .biceps, .quads, .hamstrings, .glutes, .calves, .core, .forearms]
         var out: [(MuscleGroup, [Exercise])] = []
         for m in ordered {
@@ -28,79 +150,59 @@ struct LibraryView: View {
     }
 
     var body: some View {
-        ZStack {
-            GT.bg.ignoresSafeArea()
-            VStack(alignment: .leading, spacing: 0) {
-                header
-                filterChips
-                    .padding(.vertical, 12)
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 20) {
-                        ForEach(filteredGroups, id: \.0) { group, items in
-                            VStack(alignment: .leading, spacing: 8) {
-                                Text(group.display.uppercased())
-                                    .gtMonoCaption(size: 10, tracking: 1.5)
-                                    .padding(.horizontal, 4)
-                                VStack(spacing: 0) {
-                                    ForEach(Array(items.enumerated()), id: \.element.id) { i, ex in
-                                        Button { editing = ex } label: {
-                                            exerciseRow(ex, isLast: i == items.count - 1)
-                                        }
-                                        .buttonStyle(.plain)
-                                    }
-                                }
-                                .gtCard(radius: GT.rMd)
-                            }
-                        }
-                        Color.clear.frame(height: 40)
-                    }
-                    .padding(.horizontal, 20)
-                }
-            }
-        }
-        .sheet(item: $editing) { ex in
-            ExerciseEditView(exercise: ex)
-        }
-    }
-
-    private var header: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack(alignment: .bottom) {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("\(exercises.count) EXERCISES")
-                        .gtMonoCaption(size: 11, tracking: 1.4)
-                    Text("Library")
-                        .font(.gtDisplay(34, weight: .semibold))
-                        .tracking(-1)
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 10) {
+                HStack(spacing: 8) {
+                    Image(systemName: "magnifyingglass")
+                        .foregroundColor(GT.ink3)
+                    TextField("", text: $search, prompt: Text("Search exercises").foregroundColor(GT.ink3))
+                        .font(.gtBody(14))
                         .foregroundColor(GT.ink)
+                        .textInputAutocapitalization(.never)
                 }
-                Spacer()
-                Button {
-                    addNew()
-                } label: {
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .gtCard(radius: GT.rMd)
+
+                Button { addNew() } label: {
                     Image(systemName: "plus")
-                        .font(.system(size: 20, weight: .semibold))
+                        .font(.system(size: 18, weight: .semibold))
                         .frame(width: 40, height: 40)
                         .background(Circle().fill(GT.lime))
                         .foregroundColor(GT.limeInk)
                 }
                 .buttonStyle(.plain)
             }
+            .padding(.top, 12)
 
-            HStack(spacing: 8) {
-                Image(systemName: "magnifyingglass")
-                    .foregroundColor(GT.ink3)
-                TextField("", text: $search, prompt: Text("Search exercises").foregroundColor(GT.ink3))
-                    .font(.gtBody(14))
-                    .foregroundColor(GT.ink)
-                    .textInputAutocapitalization(.never)
+            filterChips
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    ForEach(filteredGroups, id: \.0) { group, items in
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(group.display.uppercased())
+                                .gtMonoCaption(size: 10, tracking: 1.5)
+                                .padding(.horizontal, 4)
+                            VStack(spacing: 0) {
+                                ForEach(Array(items.enumerated()), id: \.element.id) { i, ex in
+                                    Button { editing = ex } label: {
+                                        exerciseRow(ex, isLast: i == items.count - 1)
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
+                            .gtCard(radius: GT.rMd)
+                        }
+                    }
+                    Color.clear.frame(height: 40)
+                }
+                .padding(.top, 6)
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 10)
-            .gtCard(radius: GT.rMd)
         }
-        .padding(.horizontal, 20)
-        .padding(.top, 10)
+        .sheet(item: $editing) { ex in
+            ExerciseEditView(exercise: ex)
+        }
     }
 
     private var filterChips: some View {
@@ -111,7 +213,6 @@ struct LibraryView: View {
                     filterChip(m.display.uppercased(), value: m)
                 }
             }
-            .padding(.horizontal, 20)
         }
     }
 

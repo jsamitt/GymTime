@@ -11,6 +11,7 @@ struct ActiveSetView: View {
 
     @State private var editingField: NumericEditField?
     @State private var showExitConfirm = false
+    @State private var showSwapPicker = false
 
     private var cursor: (ExerciseLog, Int)? {
         controller.activeCursor()
@@ -41,17 +42,31 @@ struct ActiveSetView: View {
             if settings.keepAwake {
                 UIApplication.shared.isIdleTimerDisabled = true
             }
+            pushLiveActivityState(starting: true)
         }
         .onDisappear {
             timer.stop()
             UIApplication.shared.isIdleTimerDisabled = false
+            LiveActivityController.shared.end()
         }
         .sheet(item: $editingField) { field in
             NumericEditSheet(field: field, unit: settings.units.rawValue) {
                 controller.save()
+                pushLiveActivityState()
             }
             .presentationDetents([.fraction(0.35), .medium])
             .presentationDragIndicator(.visible)
+        }
+        .sheet(isPresented: $showSwapPicker) {
+            if let (currentLog, _) = cursor, let currentEx = currentLog.exercise {
+                ExerciseSwapPicker(
+                    currentExercise: currentEx,
+                    sessionLog: currentLog
+                ) { newExercise in
+                    controller.swapCurrentExercise(to: newExercise)
+                    pushLiveActivityState()
+                }
+            }
         }
         .confirmationDialog("Exit workout?", isPresented: $showExitConfirm, titleVisibility: .visible) {
             Button("Save & Exit") {
@@ -89,7 +104,20 @@ struct ActiveSetView: View {
                         .foregroundColor(GT.ink)
                 }
                 Spacer()
-                iconCircle("ellipsis")
+                Menu {
+                    Button {
+                        showSwapPicker = true
+                    } label: {
+                        Label("Swap exercise", systemImage: "arrow.triangle.2.circlepath")
+                    }
+                } label: {
+                    Image(systemName: "ellipsis")
+                        .font(.system(size: 15))
+                        .frame(width: 36, height: 36)
+                        .background(Circle().fill(GT.surface2))
+                        .overlay(Circle().stroke(GT.line, lineWidth: 1))
+                        .foregroundColor(GT.ink2)
+                }
             }
             .padding(.horizontal, 20)
             .padding(.top, 10)
@@ -283,12 +311,15 @@ struct ActiveSetView: View {
 
     private func bumpWeight(_ set: SetLog, by delta: Double) {
         set.weight = max(0, set.weight + delta)
+        set.log?.enforceLoadingProgression()
         controller.save()
+        pushLiveActivityState()
     }
 
     private func bumpReps(_ set: SetLog, by delta: Int) {
         set.reps = max(1, min(50, set.reps + delta))
         controller.save()
+        pushLiveActivityState()
     }
 
     private var finishedOverlay: some View {
@@ -375,6 +406,39 @@ struct ActiveSetView: View {
             timer.start(planned: nextSet.plannedRestSec, hapticOnEnd: settings.hapticOnRestEnd)
         } else {
             timer.stop()
+        }
+        pushLiveActivityState()
+    }
+
+    // MARK: - Live Activity bridge
+
+    private func pushLiveActivityState(starting: Bool = false) {
+        guard let (log, idx) = controller.activeCursor() else {
+            LiveActivityController.shared.end()
+            return
+        }
+        let sets = log.orderedSets
+        guard idx < sets.count else {
+            LiveActivityController.shared.end()
+            return
+        }
+        let currentSet = sets[idx]
+        let loadIdx = loadingIndex(for: currentSet, in: sets)
+        let state = GymTimeActivityAttributes.ContentState(
+            exerciseName: log.exerciseName,
+            setLabel: setLabel(set: currentSet, loadingIndex: loadIdx),
+            setPosition: "\(idx + 1) of \(sets.count)",
+            weight: currentSet.weight,
+            reps: currentSet.reps,
+            restStartedAt: timer.isRunning ? timer.startDate : nil,
+            restPlannedSec: timer.isRunning ? timer.plannedSec : 0,
+            templateName: session.templateName,
+            unit: settings.units.rawValue
+        )
+        if starting {
+            LiveActivityController.shared.start(state: state)
+        } else {
+            LiveActivityController.shared.update(state: state)
         }
     }
 }
@@ -490,6 +554,7 @@ struct NumericEditSheet: View {
         case .weight(let s):
             if let v = Double(trimmed), v >= 0 {
                 s.weight = v
+                s.log?.enforceLoadingProgression()
                 onSave()
             }
         case .reps(let s):

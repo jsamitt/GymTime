@@ -81,14 +81,68 @@ final class SessionController: ObservableObject {
     }
 
     func finish() {
+        consolidateExerciseWeights()
         session.finishedAt = Date()
         try? context.save()
+    }
+
+    /// After a workout, carry the final loading-set weight forward to the
+    /// exercise definition so the next session starts at the new top weight.
+    /// Warmup math still flows from AppSettings percentages.
+    private func consolidateExerciseWeights() {
+        for log in session.orderedLogs {
+            guard let ex = log.exercise else { continue }
+            let loggedLoads = log.orderedSets.filter {
+                $0.kind == .load && $0.loggedAt != nil && !$0.skipped
+            }
+            guard let last = loggedLoads.last, last.weight > 0 else { continue }
+            ex.topWorkingWeight = last.weight
+        }
     }
 
     /// Delete the session entirely (cascades to ExerciseLogs and SetLogs).
     func abandon() {
         context.delete(session)
         try? context.save()
+    }
+
+    /// Swap the current in-progress exercise with a different one (ad-hoc, does
+    /// not modify the underlying template). Preserves any already-logged sets
+    /// from the original exercise for history, marks remaining unlogged sets
+    /// as skipped, and inserts a new ExerciseLog right after the current one.
+    /// If nothing was logged yet in the current log, the exercise is just
+    /// replaced in place so the log order stays clean.
+    func swapCurrentExercise(to newExercise: Exercise) {
+        guard let (currentLog, _) = activeCursor() else { return }
+        let hasLoggedProgress = currentLog.orderedSets.contains {
+            $0.loggedAt != nil && !$0.skipped
+        }
+
+        if hasLoggedProgress {
+            // Skip remaining planned sets on original so it's visually complete.
+            for set in currentLog.orderedSets where set.loggedAt == nil {
+                set.skipped = true
+                set.loggedAt = Date()
+            }
+            // Shift subsequent logs down by one so the new log slots in next.
+            let insertAt = currentLog.order + 1
+            for other in session.orderedLogs where other.order >= insertAt && other.id != currentLog.id {
+                other.order += 1
+            }
+            let fresh = ExerciseLog(session: session, exercise: newExercise, order: insertAt)
+            context.insert(fresh)
+            try? context.save()
+            buildSets(for: fresh)
+        } else {
+            // Nothing logged — clean in-place replace.
+            for s in currentLog.orderedSets {
+                context.delete(s)
+            }
+            currentLog.exercise = newExercise
+            currentLog.exerciseName = newExercise.name
+            try? context.save()
+            buildSets(for: currentLog)
+        }
     }
 
     /// Persist ad-hoc edits to attached models (e.g. mutating a SetLog's weight

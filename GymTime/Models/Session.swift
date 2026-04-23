@@ -77,6 +77,17 @@ final class ExerciseLog {
         let all = orderedSets
         return !all.isEmpty && all.allSatisfy { $0.loggedAt != nil || $0.skipped }
     }
+
+    /// Enforce non-decreasing weight across loading sets (loading 2 >= loading 1,
+    /// etc.). Call after any mutation to a loading set's weight.
+    func enforceLoadingProgression() {
+        let loads = orderedSets.filter { $0.kind == .load }
+        for i in 1..<loads.count {
+            if loads[i].weight < loads[i - 1].weight {
+                loads[i].weight = loads[i - 1].weight
+            }
+        }
+    }
 }
 
 @Model
