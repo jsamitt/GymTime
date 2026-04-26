@@ -53,34 +53,34 @@ struct SettingsView: View {
                                     onPlus:  { bumpInt(\.repStep, by:  1, min: 1, max: 5, on: s) }
                                 )
                                 StepperRow(
-                                    label: "Loading sets",
-                                    value: "\(s.defaultLoadingSets)",
+                                    label: "Sets per exercise",
+                                    value: "\(s.defaultTotalSets)",
                                     isLast: true,
-                                    onMinus: { bumpInt(\.defaultLoadingSets, by: -1, min: 1, max: 5, on: s) },
-                                    onPlus:  { bumpInt(\.defaultLoadingSets, by:  1, min: 1, max: 5, on: s) }
+                                    onMinus: { bumpInt(\.defaultTotalSets, by: -1, min: 1, max: 7, on: s) },
+                                    onPlus:  { bumpInt(\.defaultTotalSets, by:  1, min: 1, max: 7, on: s) }
                                 )
                             }
                             SettingsGroup(label: "REPS PER SET") {
                                 StepperRow(
-                                    label: "Cold warmup",
+                                    label: "Warmup 1",
                                     value: "\(s.repsCold) reps",
                                     onMinus: { bumpInt(\.repsCold, by: -1, min: 1, max: 30, on: s) },
                                     onPlus:  { bumpInt(\.repsCold, by:  1, min: 1, max: 30, on: s) }
                                 )
                                 StepperRow(
-                                    label: "Continuing warmup",
+                                    label: "Warmup 2",
                                     value: "\(s.repsWarm) reps",
                                     onMinus: { bumpInt(\.repsWarm, by: -1, min: 1, max: 30, on: s) },
                                     onPlus:  { bumpInt(\.repsWarm, by:  1, min: 1, max: 30, on: s) }
                                 )
                                 StepperRow(
-                                    label: "Loading set 1",
+                                    label: "Load 1",
                                     value: "\(s.repsLoad1) reps",
                                     onMinus: { bumpInt(\.repsLoad1, by: -1, min: 1, max: 30, on: s) },
                                     onPlus:  { bumpInt(\.repsLoad1, by:  1, min: 1, max: 30, on: s) }
                                 )
                                 StepperRow(
-                                    label: "Loading set 2",
+                                    label: "Load 2+",
                                     value: "\(s.repsLoad2) reps",
                                     isLast: true,
                                     onMinus: { bumpInt(\.repsLoad2, by: -1, min: 1, max: 30, on: s) },
@@ -89,25 +89,25 @@ struct SettingsView: View {
                             }
                             SettingsGroup(label: "REST TIMERS") {
                                 StepperRow(
-                                    label: "Cold warmup",
+                                    label: "Warmup 1",
                                     value: GTMath.mmss(s.restCold),
                                     onMinus: { bumpRest(\.restCold, by: -15, on: s) },
                                     onPlus:  { bumpRest(\.restCold, by:  15, on: s) }
                                 )
                                 StepperRow(
-                                    label: "Continuing warmup",
+                                    label: "Warmup 2",
                                     value: GTMath.mmss(s.restWarm),
                                     onMinus: { bumpRest(\.restWarm, by: -15, on: s) },
                                     onPlus:  { bumpRest(\.restWarm, by:  15, on: s) }
                                 )
                                 StepperRow(
-                                    label: "Loading set 1",
+                                    label: "Load 1",
                                     value: GTMath.mmss(s.restLoad1),
                                     onMinus: { bumpRest(\.restLoad1, by: -15, on: s) },
                                     onPlus:  { bumpRest(\.restLoad1, by:  15, on: s) }
                                 )
                                 StepperRow(
-                                    label: "Loading set 2",
+                                    label: "Load 2+",
                                     value: GTMath.mmss(s.restLoad2),
                                     isLast: true,
                                     onMinus: { bumpRest(\.restLoad2, by: -15, on: s) },

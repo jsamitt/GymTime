@@ -35,12 +35,14 @@ final class Exercise {
     var notes: String = ""
     var topWorkingWeight: Double = 0
     var repTarget: Int = 5
-    var numLoadingSets: Int = 2
-    /// When true, ignore `numLoadingSets` and use `AppSettings.defaultLoadingSets`.
-    /// Existing records default to true on schema migration so behavior matches
-    /// the new global default rather than carrying a per-exercise override
-    /// nobody asked for.
-    var useDefaultLoadingSets: Bool = true
+    /// Total sets for this exercise (warmups + loads combined). Used only
+    /// when `useDefaultTotalSets == false`. SetLabeler decides how many of
+    /// these become warmups vs loads based on the count.
+    var totalSets: Int = 4
+    /// When true, ignore `totalSets` and use `AppSettings.defaultTotalSets`.
+    /// Existing records default to true so behavior matches the new global
+    /// default rather than carrying a per-exercise override nobody asked for.
+    var useDefaultTotalSets: Bool = true
     var isInLibrary: Bool = true
     var createdAt: Date = Date()
 
@@ -70,7 +72,7 @@ final class Exercise {
         notes: String = "",
         topWorkingWeight: Double = 0,
         repTarget: Int = 5,
-        numLoadingSets: Int = 2,
+        totalSets: Int = 4,
         isInLibrary: Bool = true
     ) {
         self.name = name
@@ -79,7 +81,7 @@ final class Exercise {
         self.notes = notes
         self.topWorkingWeight = topWorkingWeight
         self.repTarget = repTarget
-        self.numLoadingSets = numLoadingSets
+        self.totalSets = totalSets
         self.isInLibrary = isInLibrary
     }
 

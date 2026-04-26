@@ -15,30 +15,44 @@ struct ExerciseEditView: View {
 
     // MARK: - Derived
 
+    /// Total sets this exercise will generate at run-time. Mirrors
+    /// SessionController.buildSets so the preview is accurate.
+    private var effectiveTotalSets: Int {
+        let raw = exercise.useDefaultTotalSets
+            ? settings.defaultTotalSets
+            : exercise.totalSets
+        return max(1, min(7, raw))
+    }
+
+    /// Preview of every set this exercise will generate, with the labels
+    /// SetLabeler emits at runtime. Loads are flagged primary; warmups are
+    /// secondary (lighter card style).
     private var computedSets: [SetPreview] {
-        let top = exercise.topWorkingWeight
-        var out: [SetPreview] = [
-            SetPreview(
-                kind: "COLD WARMUP",
-                weight: exercise.effectiveWeight(for: .cold, settings: settings),
-                reps: exercise.effectiveReps(for: .cold, settings: settings),
-                rest: settings.restCold == 0 ? "—" : GTMath.mmss(settings.restCold),
-                pct: Int(settings.coldPct * 100),
-                primary: false
-            ),
-            SetPreview(
-                kind: "CONTINUING WARMUP",
-                weight: exercise.effectiveWeight(for: .warm, settings: settings),
-                reps: exercise.effectiveReps(for: .warm, settings: settings),
-                rest: GTMath.mmss(settings.restWarm),
-                pct: Int(settings.warmPct * 100),
-                primary: false
-            ),
-        ]
-        for i in 0..<max(1, exercise.numLoadingSets) {
+        let total = effectiveTotalSets
+        let warmups = SetLabeler.warmupCount(forTotal: total)
+        let loads = SetLabeler.loadCount(forTotal: total)
+        var out: [SetPreview] = []
+
+        for i in 0..<warmups {
+            let kind: SetKind = i == 0 ? .cold : .warm
+            let weight = exercise.effectiveWeight(for: kind, settings: settings)
+            let reps = exercise.effectiveReps(for: kind, settings: settings)
+            let rest = i == 0 ? settings.restCold : settings.restWarm
+            let pct = Int((kind == .cold ? settings.coldPct : settings.warmPct) * 100)
             out.append(SetPreview(
-                kind: "LOADING SET \(i + 1)",
-                weight: top,
+                kind: SetLabeler.compactLabel(forSetAt: i, totalSets: total),
+                weight: weight,
+                reps: reps,
+                rest: rest == 0 ? "—" : GTMath.mmss(rest),
+                pct: pct,
+                primary: false
+            ))
+        }
+        for i in 0..<loads {
+            let setIdx = warmups + i
+            out.append(SetPreview(
+                kind: SetLabeler.compactLabel(forSetAt: setIdx, totalSets: total),
+                weight: exercise.topWorkingWeight,
                 reps: exercise.effectiveReps(for: .load, loadingIndex: i, settings: settings),
                 rest: GTMath.mmss(settings.plannedRest(for: .load, loadingIndex: i)),
                 pct: 100,
@@ -288,48 +302,47 @@ struct ExerciseEditView: View {
         .gtCard(radius: GT.rLg)
     }
 
-    // Per-exercise loading-set count, with a "Use default" toggle on the
-    // right that defers to AppSettings.defaultLoadingSets when on. Toggle
-    // off to override.
+    // Per-exercise total-set count, with a "Use default" toggle on the
+    // right that defers to AppSettings.defaultTotalSets when on. Toggle
+    // off to override (1–7 range).
     @ViewBuilder
     private var loadingSetsRow: some View {
         HStack(spacing: 10) {
-            Text("Loading sets")
+            Text("Sets")
                 .font(.gtBody(12))
                 .foregroundColor(GT.ink2)
 
             Spacer()
 
-            if exercise.useDefaultLoadingSets {
-                Text("default · \(settings.defaultLoadingSets)")
+            if exercise.useDefaultTotalSets {
+                Text("default · \(settings.defaultTotalSets)")
                     .font(.gtMono(12, weight: .medium))
                     .tracking(0.4)
                     .foregroundColor(GT.lime)
             } else {
-                Text("\(exercise.numLoadingSets)")
+                Text("\(exercise.totalSets)")
                     .font(.gtMono(13))
                     .foregroundColor(GT.ink)
                 HStack(spacing: 0) {
                     stepButton("−") {
-                        exercise.numLoadingSets = max(1, exercise.numLoadingSets - 1)
+                        exercise.totalSets = max(1, exercise.totalSets - 1)
                         try? context.save()
                     }
                     stepButton("+") {
-                        exercise.numLoadingSets = min(5, exercise.numLoadingSets + 1)
+                        exercise.totalSets = min(7, exercise.totalSets + 1)
                         try? context.save()
                     }
                 }
             }
 
             Toggle("", isOn: Binding(
-                get: { exercise.useDefaultLoadingSets },
+                get: { exercise.useDefaultTotalSets },
                 set: { newValue in
-                    exercise.useDefaultLoadingSets = newValue
-                    if !newValue && exercise.numLoadingSets < 1 {
-                        // First time the user overrides, seed numLoadingSets
-                        // with the current global default for a sane starting
-                        // point.
-                        exercise.numLoadingSets = max(1, settings.defaultLoadingSets)
+                    exercise.useDefaultTotalSets = newValue
+                    if !newValue && exercise.totalSets < 1 {
+                        // First time overriding — seed totalSets with the
+                        // current global default for a sane starting point.
+                        exercise.totalSets = max(1, settings.defaultTotalSets)
                     }
                     try? context.save()
                 }
@@ -451,7 +464,7 @@ struct ExerciseEditView: View {
     private var warmupWeightCard: some View {
         VStack(spacing: 0) {
             warmupWeightRow(
-                label: "Cold warmup",
+                label: "Warmup 1",
                 override: exercise.weightColdOverride,
                 computed: GTMath.warmupWeight(top: exercise.topWorkingWeight, pct: settings.coldPct, step: settings.weightStep),
                 pct: Int(settings.coldPct * 100)
@@ -460,7 +473,7 @@ struct ExerciseEditView: View {
             }
             Rectangle().fill(GT.line).frame(height: 1)
             warmupWeightRow(
-                label: "Continuing warmup",
+                label: "Warmup 2",
                 override: exercise.weightWarmOverride,
                 computed: GTMath.warmupWeight(top: exercise.topWorkingWeight, pct: settings.warmPct, step: settings.weightStep),
                 pct: Int(settings.warmPct * 100),
@@ -530,20 +543,20 @@ struct ExerciseEditView: View {
 
     private var repsCard: some View {
         VStack(spacing: 0) {
-            repRow(kind: "Cold warmup", value: exercise.repsColdOverride, fallback: settings.repsCold) {
+            repRow(kind: "Warmup 1", value: exercise.repsColdOverride, fallback: settings.repsCold) {
                 bumpOverride(\.repsColdOverride, by: $0)
             }
             Rectangle().fill(GT.line).frame(height: 1)
-            repRow(kind: "Continuing warmup", value: exercise.repsWarmOverride, fallback: settings.repsWarm) {
+            repRow(kind: "Warmup 2", value: exercise.repsWarmOverride, fallback: settings.repsWarm) {
                 bumpOverride(\.repsWarmOverride, by: $0)
             }
             Rectangle().fill(GT.line).frame(height: 1)
-            repRow(kind: "Loading set 1", value: exercise.repsLoad1Override, fallback: settings.repsLoad1) {
+            repRow(kind: "Load 1", value: exercise.repsLoad1Override, fallback: settings.repsLoad1) {
                 bumpOverride(\.repsLoad1Override, by: $0)
             }
-            if exercise.numLoadingSets > 1 {
+            if SetLabeler.loadCount(forTotal: effectiveTotalSets) > 1 {
                 Rectangle().fill(GT.line).frame(height: 1)
-                repRow(kind: "Loading set 2", value: exercise.repsLoad2Override, fallback: settings.repsLoad2, isLast: true) {
+                repRow(kind: "Load 2+", value: exercise.repsLoad2Override, fallback: settings.repsLoad2, isLast: true) {
                     bumpOverride(\.repsLoad2Override, by: $0)
                 }
             }

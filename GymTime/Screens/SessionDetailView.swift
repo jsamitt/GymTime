@@ -77,9 +77,13 @@ struct SessionDetailView: View {
     }
 
     private func exerciseCard(_ log: ExerciseLog) -> some View {
-        let loads = log.orderedSets.filter { $0.kind == .load && $0.loggedAt != nil && !$0.skipped }
-        let warms = log.orderedSets.filter { ($0.kind == .cold || $0.kind == .warm) && $0.loggedAt != nil && !$0.skipped }
-        let skipped = log.orderedSets.filter { $0.skipped }
+        // Walk every set in stored order; SetLabeler decides the label per
+        // set position, matching what the active-set view showed during
+        // the workout. Loads are visually primary; warmups secondary.
+        let allSets = log.orderedSets
+        let logged = allSets.filter { $0.loggedAt != nil && !$0.skipped }
+        let skipped = allSets.filter { $0.skipped }
+        let lastLoad = logged.filter { $0.kind == .load }.last
 
         return VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .firstTextBaseline) {
@@ -87,7 +91,7 @@ struct SessionDetailView: View {
                     .font(.gtDisplay(18, weight: .semibold))
                     .foregroundColor(GT.ink)
                 Spacer()
-                if let last = loads.last {
+                if let last = lastLoad {
                     Text("TOP \(GTMath.formatWeight(last.weight)) × \(last.reps)")
                         .font(.gtMono(10, weight: .semibold))
                         .tracking(1.0)
@@ -95,22 +99,21 @@ struct SessionDetailView: View {
                 }
             }
 
-            if loads.isEmpty && warms.isEmpty {
+            if logged.isEmpty {
                 Text("No sets logged")
                     .font(.gtMono(11))
                     .foregroundColor(GT.ink3)
             } else {
                 VStack(spacing: 6) {
-                    ForEach(Array(loads.enumerated()), id: \.element.id) { idx, set in
-                        setRow(label: "LOAD \(idx + 1)", weight: set.weight, reps: set.reps, primary: true)
-                    }
-                    ForEach(warms) { set in
-                        setRow(
-                            label: set.kind == .cold ? "COLD" : "WARM",
-                            weight: set.weight,
-                            reps: set.reps,
-                            primary: false
-                        )
+                    ForEach(Array(allSets.enumerated()), id: \.element.id) { idx, set in
+                        if set.loggedAt != nil && !set.skipped {
+                            setRow(
+                                label: SetLabeler.compactLabel(forSetAt: idx, totalSets: allSets.count),
+                                weight: set.weight,
+                                reps: set.reps,
+                                primary: set.kind == .load
+                            )
+                        }
                     }
                 }
             }

@@ -183,7 +183,7 @@ struct ActiveSetView: View {
                 Image(systemName: "scope")
                     .font(.system(size: 11))
                     .foregroundColor(GT.lime)
-                Text(setLabel(set: set, loadingIndex: loadingIndex(for: set, in: sets)))
+                Text(setLabel(set: set, in: sets))
                     .font(.gtMono(11, weight: .medium))
                     .tracking(0.3)
             }
@@ -436,18 +436,14 @@ struct ActiveSetView: View {
         .buttonStyle(.plain)
     }
 
-    private func setLabel(set: SetLog, loadingIndex: Int?) -> String {
-        switch set.kind {
-        case .cold: return "COLD WARMUP"
-        case .warm: return "CONTINUING WARMUP"
-        case .load: return "LOADING SET \((loadingIndex ?? 0) + 1)"
+    /// Compact uppercased label for the current set (e.g. "WARMUP 1",
+    /// "LOAD 2", "SET 1"). Driven by SetLabeler so the names stay in sync
+    /// with the workout overview, history detail, and Live Activity.
+    private func setLabel(set: SetLog, in sets: [SetLog]) -> String {
+        guard let idx = sets.firstIndex(where: { $0.id == set.id }) else {
+            return "SET"
         }
-    }
-
-    private func loadingIndex(for set: SetLog, in sets: [SetLog]) -> Int? {
-        guard set.kind == .load else { return nil }
-        let loads = sets.filter { $0.kind == .load }
-        return loads.firstIndex(where: { $0.id == set.id })
+        return SetLabeler.compactLabel(forSetAt: idx, totalSets: sets.count)
     }
 
     /// First exercise log after `currentLog` that still has unlogged sets.
@@ -518,10 +514,9 @@ struct ActiveSetView: View {
             return
         }
         let currentSet = sets[idx]
-        let loadIdx = loadingIndex(for: currentSet, in: sets)
         let state = GymTimeActivityAttributes.ContentState(
             exerciseName: log.exerciseName,
-            setLabel: setLabel(set: currentSet, loadingIndex: loadIdx),
+            setLabel: SetLabeler.compactLabel(forSetAt: idx, totalSets: sets.count),
             setPosition: "\(idx + 1) of \(sets.count)",
             weight: currentSet.weight,
             reps: currentSet.reps,

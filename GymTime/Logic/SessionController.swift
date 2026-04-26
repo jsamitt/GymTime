@@ -6,7 +6,6 @@ import SwiftData
 @MainActor
 final class SessionController: ObservableObject {
     @Published var session: Session
-    private var seenColdMuscles: Set<String> = []
     private let context: ModelContext
     private let settings: AppSettings
 
@@ -14,55 +13,43 @@ final class SessionController: ObservableObject {
         self.session = session
         self.context = context
         self.settings = settings
-        // Reconstruct "seen muscle groups" from already-completed logs
-        // (for a resumed session).
-        for log in session.orderedLogs where log.isComplete || log.orderedSets.contains(where: { $0.kind == .cold && $0.loggedAt != nil }) {
-            if let muscle = log.exercise?.primaryMuscle?.rawValue {
-                seenColdMuscles.insert(muscle)
-            }
-        }
     }
 
-    /// Build SetLogs for a given exercise, honouring cold-warmup-once-per-muscle rule.
+    /// Build SetLogs for a given exercise. Total set count is deterministic
+    /// per exercise (global default, or the per-exercise override) — there's
+    /// no muscle-history adjustment. SetLabeler decides how the count splits
+    /// between warmups and loads, and the same labeling is used at display
+    /// time.
     func buildSets(for log: ExerciseLog) {
         guard let ex = log.exercise else { return }
         // Don't rebuild if already populated
         if !(log.sets ?? []).isEmpty { return }
 
-        let top = ex.topWorkingWeight
-        let muscleKey = ex.primaryMuscle?.rawValue ?? ""
-        let shouldIncludeCold = !muscleKey.isEmpty && !seenColdMuscles.contains(muscleKey)
-        var order = 0
+        let total: Int = {
+            let raw = ex.useDefaultTotalSets ? settings.defaultTotalSets : ex.totalSets
+            return max(1, min(7, raw))
+        }()
+        let warmupCount = SetLabeler.warmupCount(forTotal: total)
+        let loadCount = SetLabeler.loadCount(forTotal: total)
 
-        if shouldIncludeCold {
-            let w = ex.effectiveWeight(for: .cold, settings: settings)
-            let reps = ex.effectiveReps(for: .cold, settings: settings)
-            let s = SetLog(kind: .cold, weight: w, reps: reps, plannedRestSec: settings.restCold, order: order)
+        var order = 0
+        // Warmups. First warmup uses cold settings (rest/weight/reps), second
+        // uses warm settings. SetLabeler covers the display naming.
+        for i in 0..<warmupCount {
+            let kind: SetKind = i == 0 ? .cold : .warm
+            let weight = ex.effectiveWeight(for: kind, settings: settings)
+            let reps = ex.effectiveReps(for: kind, settings: settings)
+            let rest = i == 0 ? settings.restCold : settings.restWarm
+            let s = SetLog(kind: kind, weight: weight, reps: reps, plannedRestSec: rest, order: order)
             s.log = log
             context.insert(s)
             order += 1
         }
-        if !muscleKey.isEmpty {
-            seenColdMuscles.insert(muscleKey)
-        }
-        // One continuing-warmup set
-        let warmW = ex.effectiveWeight(for: .warm, settings: settings)
-        let warmReps = ex.effectiveReps(for: .warm, settings: settings)
-        let warmSet = SetLog(kind: .warm, weight: warmW, reps: warmReps, plannedRestSec: settings.restWarm, order: order)
-        warmSet.log = log
-        context.insert(warmSet)
-        order += 1
-
-        // Loading sets — count comes from per-exercise override if the user
-        // disabled "Use default", otherwise from the global AppSettings value.
-        let loadingCount: Int = {
-            let raw = ex.useDefaultLoadingSets ? settings.defaultLoadingSets : ex.numLoadingSets
-            return max(1, min(5, raw))
-        }()
-        for i in 0..<loadingCount {
+        // Loads.
+        for i in 0..<loadCount {
             let rest = settings.plannedRest(for: .load, loadingIndex: i)
             let reps = ex.effectiveReps(for: .load, loadingIndex: i, settings: settings)
-            let s = SetLog(kind: .load, weight: top, reps: reps, plannedRestSec: rest, order: order)
+            let s = SetLog(kind: .load, weight: ex.topWorkingWeight, reps: reps, plannedRestSec: rest, order: order)
             s.log = log
             context.insert(s)
             order += 1
@@ -72,10 +59,6 @@ final class SessionController: ObservableObject {
 
     func logSet(_ s: SetLog) {
         s.loggedAt = Date()
-        if s.kind == .cold,
-           let muscle = s.log?.exercise?.primaryMuscle?.rawValue {
-            seenColdMuscles.insert(muscle)
-        }
         try? context.save()
     }
 

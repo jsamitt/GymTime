@@ -123,8 +123,9 @@ struct WorkoutOverviewSheet: View {
 
     @ViewBuilder
     private func setRow(set: SetLog, log: ExerciseLog) -> some View {
-        let loadIndex = loadingIndex(for: set, in: log.orderedSets)
-        let kindLabel = setKindLabel(set: set, loadingIndex: loadIndex)
+        let sets = log.orderedSets
+        let setIndex = sets.firstIndex(where: { $0.id == set.id }) ?? 0
+        let kindLabel = SetLabeler.compactLabel(forSetAt: setIndex, totalSets: sets.count)
         let isCurrent = set.id == currentSetID
         let logged = set.loggedAt != nil && !set.skipped
         let skipped = set.skipped
@@ -185,17 +186,4 @@ struct WorkoutOverviewSheet: View {
             .overlay(Capsule().stroke(lime ? .clear : GT.line, lineWidth: 1))
     }
 
-    private func loadingIndex(for set: SetLog, in sets: [SetLog]) -> Int? {
-        guard set.kind == .load else { return nil }
-        let loads = sets.filter { $0.kind == .load }
-        return loads.firstIndex(where: { $0.id == set.id })
-    }
-
-    private func setKindLabel(set: SetLog, loadingIndex: Int?) -> String {
-        switch set.kind {
-        case .cold: return "COLD"
-        case .warm: return "WARM"
-        case .load: return "LOAD \((loadingIndex ?? 0) + 1)"
-        }
-    }
 }

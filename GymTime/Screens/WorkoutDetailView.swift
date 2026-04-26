@@ -29,7 +29,10 @@ struct WorkoutDetailView: View {
         max(25, exercises.count * 11)
     }
     private var totalSets: Int {
-        exercises.reduce(0) { $0 + (1 + $1.numLoadingSets) + 1 }
+        exercises.reduce(0) { acc, ex in
+            let raw = ex.useDefaultTotalSets ? settings.defaultTotalSets : ex.totalSets
+            return acc + max(1, min(7, raw))
+        }
     }
 
     var body: some View {
@@ -316,6 +319,11 @@ struct ExerciseRow: View {
     let exercise: Exercise
     let settings: AppSettings
 
+    private func exerciseTotalSets(_ ex: Exercise) -> Int {
+        let raw = ex.useDefaultTotalSets ? settings.defaultTotalSets : ex.totalSets
+        return max(1, min(7, raw))
+    }
+
     var body: some View {
         let load1Reps = exercise.effectiveReps(for: .load, loadingIndex: 0, settings: settings)
         HStack(spacing: 12) {
@@ -334,7 +342,7 @@ struct ExerciseRow: View {
                     .tracking(-0.2)
                     .foregroundColor(GT.ink)
                 HStack(spacing: 8) {
-                    Text("\(GTMath.formatWeight(exercise.topWorkingWeight)) \(settings.units.rawValue) × \(load1Reps) · \(2 + exercise.numLoadingSets) sets")
+                    Text("\(GTMath.formatWeight(exercise.topWorkingWeight)) \(settings.units.rawValue) × \(load1Reps) · \(exerciseTotalSets(exercise)) sets")
                         .foregroundColor(GT.ink2)
                     Text("·").foregroundColor(GT.ink3)
                     Text("1RM \(Int(GTMath.epley1RM(weight: exercise.topWorkingWeight, reps: load1Reps)))")

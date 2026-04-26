@@ -11,7 +11,11 @@ final class AppSettings {
     var warmPct: Double = 0.75
     var weightStep: Double = 5.0
     var repStep: Int = 1
-    var defaultLoadingSets: Int = 2
+    /// Default number of total sets per exercise (warmups + loads combined).
+    /// SetLabeler.warmupCount(forTotal:) splits this between warmup and load
+    /// kinds, and SetLabeler.label(forSetAt:totalSets:) names them.
+    /// Default 4 corresponds to "Warmup 1, Warmup 2, Load 1, Load 2".
+    var defaultTotalSets: Int = 4
 
     var restCold: Int = 0
     var restWarm: Int = 90
