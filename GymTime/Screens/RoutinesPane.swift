@@ -102,53 +102,58 @@ struct RoutinesPane: View {
             }
             .padding(.top, 12)
 
-            if editMode.isEditing {
-                // Reorder mode uses a List so drag handles work natively.
+            // Single List handles both modes natively. Vertical scroll uses
+            // the system's pan recognizer so it doesn't compete with custom
+            // drag gestures the way our SwipeToDeleteRow did. Reorder is
+            // handled by SwiftUI's built-in editMode + .onMove. Delete is a
+            // .swipeActions trailing edge.
+            if templates.isEmpty {
+                emptyState
+                    .padding(.top, 24)
+            } else {
                 List {
                     ForEach(templates) { t in
-                        reorderRow(t)
-                            .listRowBackground(GT.bg)
-                            .listRowSeparator(.hidden)
-                            .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
+                        Button {
+                            if !editMode.isEditing { openingTemplate = t }
+                        } label: {
+                            templateCard(t)
+                        }
+                        .buttonStyle(.plain)
+                        .listRowBackground(GT.bg)
+                        .listRowSeparator(.hidden)
+                        .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
+                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                            Button(role: .destructive) {
+                                pendingDelete = t
+                            } label: {
+                                Label("Delete", systemImage: "trash")
+                            }
+                        }
+                        .contextMenu {
+                            Button {
+                                cloneName = "\(t.name) Copy"
+                                cloneSource = t
+                            } label: {
+                                Label("Clone as variant…", systemImage: "doc.on.doc")
+                            }
+                            Button(role: .destructive) {
+                                pendingDelete = t
+                            } label: {
+                                Label("Delete", systemImage: "trash")
+                            }
+                        }
                     }
                     .onMove(perform: moveTemplates)
+
+                    Color.clear
+                        .frame(height: 40)
+                        .listRowBackground(GT.bg)
+                        .listRowSeparator(.hidden)
+                        .listRowInsets(EdgeInsets())
                 }
                 .listStyle(.plain)
                 .scrollContentBackground(.hidden)
                 .environment(\.editMode, $editMode)
-                .frame(minHeight: 200)
-            } else {
-                ScrollView {
-                    VStack(spacing: 8) {
-                        if templates.isEmpty {
-                            emptyState
-                        } else {
-                            ForEach(templates) { t in
-                                SwipeToDeleteRow(
-                                    onTap: { openingTemplate = t },
-                                    onDelete: { pendingDelete = t }
-                                ) {
-                                    templateCard(t)
-                                }
-                                .contextMenu {
-                                    Button {
-                                        cloneName = "\(t.name) Copy"
-                                        cloneSource = t
-                                    } label: {
-                                        Label("Clone as variant…", systemImage: "doc.on.doc")
-                                    }
-                                    Button(role: .destructive) {
-                                        pendingDelete = t
-                                    } label: {
-                                        Label("Delete", systemImage: "trash")
-                                    }
-                                }
-                            }
-                        }
-                        Color.clear.frame(height: 40)
-                    }
-                    .padding(.top, 4)
-                }
             }
         }
     }
@@ -180,23 +185,6 @@ struct RoutinesPane: View {
         }
         .padding(14)
         .frame(maxWidth: .infinity)
-        .gtCard(radius: GT.rMd)
-    }
-
-    private func reorderRow(_ t: WorkoutTemplate) -> some View {
-        HStack(spacing: 12) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(t.name)
-                    .font(.gtDisplay(15, weight: .semibold))
-                    .foregroundColor(GT.ink)
-                Text("\(t.orderedExercises.count) ex")
-                    .font(.gtMono(10))
-                    .foregroundColor(GT.ink3)
-            }
-            Spacer()
-        }
-        .padding(12)
-        .frame(maxWidth: .infinity, alignment: .leading)
         .gtCard(radius: GT.rMd)
     }
 

@@ -10,9 +10,6 @@ struct HomeView: View {
     @State private var activeTemplate: WorkoutTemplate?
     @State private var resumingSession: Session?
 
-    private var primary: [WorkoutTemplate] { Array(templates.prefix(3)) }
-    private var alternate: [WorkoutTemplate] { Array(templates.dropFirst(3)) }
-
     private var activeSession: Session? {
         sessions
             .filter { $0.finishedAt == nil }
@@ -42,47 +39,18 @@ struct HomeView: View {
                     }
                     .padding(.top, 22)
 
-                    // Routine header
-                    HStack {
-                        Text("PPL ROUTINE · WEEK \(routineWeek)")
-                            .gtMonoCaption(size: 11, tracking: 1.6)
-                        Spacer()
-                        Text("edit")
-                            .font(.gtMono(11))
-                            .foregroundColor(GT.ink3)
-                    }
-                    .padding(.top, 22)
-                    .padding(.bottom, 12)
+                    Text("ROUTINES")
+                        .gtMonoCaption(size: 11, tracking: 1.6)
+                        .padding(.top, 22)
+                        .padding(.bottom, 12)
 
-                    VStack(spacing: 10) {
-                        ForEach(Array(primary.enumerated()), id: \.element.id) { i, t in
-                            Button { activeTemplate = t } label: {
-                                WorkoutCard(template: t, isNext: i == 0, lastLabel: lastLabel(for: t))
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-
-                    if !alternate.isEmpty {
-                        Text("ALTERNATE TEMPLATES")
-                            .gtMonoCaption(size: 11, tracking: 1.6)
-                            .padding(.top, 22)
-                            .padding(.bottom, 10)
-
-                        HStack(spacing: 10) {
-                            ForEach(alternate) { t in
+                    if templates.isEmpty {
+                        emptyTemplatesHint
+                    } else {
+                        VStack(spacing: 10) {
+                            ForEach(templates) { t in
                                 Button { activeTemplate = t } label: {
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(t.name)
-                                            .font(.gtDisplay(18, weight: .semibold))
-                                            .foregroundColor(GT.ink)
-                                        Text("\(t.orderedExercises.count) exercises")
-                                            .font(.gtBody(11))
-                                            .foregroundColor(GT.ink3)
-                                    }
-                                    .padding(14)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                    .gtCard()
+                                    WorkoutCard(template: t, lastLabel: lastLabel(for: t))
                                 }
                                 .buttonStyle(.plain)
                             }
@@ -193,10 +161,18 @@ struct HomeView: View {
             .reduce(0) { $0 + $1.totalVolume }
     }
 
-    private var routineWeek: Int {
-        guard let first = finishedSessions.map(\.startedAt).min() else { return 1 }
-        let weeks = Calendar.current.dateComponents([.weekOfYear], from: first, to: Date()).weekOfYear ?? 0
-        return max(1, weeks + 1)
+    private var emptyTemplatesHint: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("No routines yet")
+                .font(.gtDisplay(16, weight: .semibold))
+                .foregroundColor(GT.ink)
+            Text("Open Library → Routines → NEW ROUTINE to create one.")
+                .font(.gtBody(12))
+                .foregroundColor(GT.ink3)
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .gtCard(radius: GT.rLg)
     }
 
     private func lastLabel(for t: WorkoutTemplate) -> String {
@@ -216,50 +192,43 @@ struct HomeView: View {
 
 struct WorkoutCard: View {
     let template: WorkoutTemplate
-    let isNext: Bool
     let lastLabel: String
 
+    /// Same formula WorkoutDetailView uses — 11 minutes per exercise, with
+    /// a floor of 25 to keep short routines from looking trivial.
+    private var estimatedMinutes: Int {
+        max(25, template.orderedExercises.count * 11)
+    }
+
     var body: some View {
-        ZStack(alignment: .topTrailing) {
-            if isNext {
-                Text("NEXT UP →")
-                    .font(.gtMono(10, weight: .medium))
-                    .tracking(1.5)
-                    .foregroundColor(GT.limeInk.opacity(0.6))
-                    .padding(.top, 14)
-                    .padding(.trailing, 16)
-            }
-            VStack(alignment: .leading, spacing: 0) {
-                Text(template.name)
-                    .font(.gtDisplay(32, weight: .semibold))
-                    .tracking(-1.2)
-                    .foregroundColor(isNext ? GT.limeInk : GT.ink)
+        VStack(alignment: .leading, spacing: 0) {
+            Text(template.name)
+                .font(.gtDisplay(28, weight: .semibold))
+                .tracking(-1.0)
+                .foregroundColor(GT.ink)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+            if !template.subtitle.isEmpty {
                 Text(template.subtitle)
                     .font(.gtBody(13))
-                    .foregroundColor(isNext ? GT.limeInk.opacity(0.65) : GT.ink2)
+                    .foregroundColor(GT.ink2)
                     .padding(.top, 4)
-
-                HStack(spacing: 12) {
-                    Text("\(template.orderedExercises.count) ex")
-                    Text("·").opacity(0.5)
-                    Text("~52 min")
-                    Text("·").opacity(0.5)
-                    Text("last: \(lastLabel)")
-                }
-                .font(.gtMono(11))
-                .foregroundColor(isNext ? GT.limeInk.opacity(0.65) : GT.ink3)
-                .padding(.top, 16)
+                    .lineLimit(2)
             }
-            .padding(18)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            HStack(spacing: 10) {
+                Text("\(template.orderedExercises.count) ex")
+                Text("·").opacity(0.5)
+                Text("~\(estimatedMinutes) min")
+                Text("·").opacity(0.5)
+                Text("last: \(lastLabel)")
+            }
+            .font(.gtMono(11))
+            .foregroundColor(GT.ink3)
+            .padding(.top, 14)
         }
-        .background(
-            RoundedRectangle(cornerRadius: GT.rLg)
-                .fill(isNext ? GT.lime : GT.surface)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: GT.rLg)
-                .stroke(isNext ? .clear : GT.line, lineWidth: 1)
-        )
+        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: GT.rLg).fill(GT.surface))
+        .overlay(RoundedRectangle(cornerRadius: GT.rLg).stroke(GT.line, lineWidth: 1))
     }
 }
