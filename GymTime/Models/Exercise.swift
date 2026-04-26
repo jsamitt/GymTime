@@ -36,6 +36,11 @@ final class Exercise {
     var topWorkingWeight: Double = 0
     var repTarget: Int = 5
     var numLoadingSets: Int = 2
+    /// When true, ignore `numLoadingSets` and use `AppSettings.defaultLoadingSets`.
+    /// Existing records default to true on schema migration so behavior matches
+    /// the new global default rather than carrying a per-exercise override
+    /// nobody asked for.
+    var useDefaultLoadingSets: Bool = true
     var isInLibrary: Bool = true
     var createdAt: Date = Date()
 

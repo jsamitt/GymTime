@@ -278,29 +278,68 @@ struct ExerciseEditView: View {
                 Text("\(Int(GTMath.epley1RM(weight: exercise.topWorkingWeight, reps: exercise.effectiveReps(for: .load, loadingIndex: 0, settings: settings)))) \(settings.units.rawValue)")
                     .font(.gtMono(13))
                     .foregroundColor(GT.ink)
-                Rectangle().fill(GT.line).frame(width: 1, height: 14).padding(.horizontal, 10)
-                Text("Loading sets")
-                    .font(.gtBody(12))
-                    .foregroundColor(GT.ink2)
-                Spacer()
+            }
+            .padding(10)
+            .background(RoundedRectangle(cornerRadius: GT.rMd).fill(GT.surface2))
+
+            loadingSetsRow
+        }
+        .padding(16)
+        .gtCard(radius: GT.rLg)
+    }
+
+    // Per-exercise loading-set count, with a "Use default" toggle on the
+    // right that defers to AppSettings.defaultLoadingSets when on. Toggle
+    // off to override.
+    @ViewBuilder
+    private var loadingSetsRow: some View {
+        HStack(spacing: 10) {
+            Text("Loading sets")
+                .font(.gtBody(12))
+                .foregroundColor(GT.ink2)
+
+            Spacer()
+
+            if exercise.useDefaultLoadingSets {
+                Text("default · \(settings.defaultLoadingSets)")
+                    .font(.gtMono(12, weight: .medium))
+                    .tracking(0.4)
+                    .foregroundColor(GT.lime)
+            } else {
                 Text("\(exercise.numLoadingSets)")
                     .font(.gtMono(13))
                     .foregroundColor(GT.ink)
                 HStack(spacing: 0) {
                     stepButton("−") {
-                        exercise.numLoadingSets = max(1, exercise.numLoadingSets - 1); try? context.save()
+                        exercise.numLoadingSets = max(1, exercise.numLoadingSets - 1)
+                        try? context.save()
                     }
                     stepButton("+") {
-                        exercise.numLoadingSets = min(5, exercise.numLoadingSets + 1); try? context.save()
+                        exercise.numLoadingSets = min(5, exercise.numLoadingSets + 1)
+                        try? context.save()
                     }
                 }
-                .padding(.leading, 8)
             }
-            .padding(10)
-            .background(RoundedRectangle(cornerRadius: GT.rMd).fill(GT.surface2))
+
+            Toggle("", isOn: Binding(
+                get: { exercise.useDefaultLoadingSets },
+                set: { newValue in
+                    exercise.useDefaultLoadingSets = newValue
+                    if !newValue && exercise.numLoadingSets < 1 {
+                        // First time the user overrides, seed numLoadingSets
+                        // with the current global default for a sane starting
+                        // point.
+                        exercise.numLoadingSets = max(1, settings.defaultLoadingSets)
+                    }
+                    try? context.save()
+                }
+            ))
+            .toggleStyle(SwitchToggleStyle(tint: GT.lime))
+            .labelsHidden()
+            .scaleEffect(0.85)
         }
-        .padding(16)
-        .gtCard(radius: GT.rLg)
+        .padding(10)
+        .background(RoundedRectangle(cornerRadius: GT.rMd).fill(GT.surface2))
     }
 
     // MARK: - Trend

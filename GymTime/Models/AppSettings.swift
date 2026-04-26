@@ -11,6 +11,7 @@ final class AppSettings {
     var warmPct: Double = 0.75
     var weightStep: Double = 5.0
     var repStep: Int = 1
+    var defaultLoadingSets: Int = 2
 
     var restCold: Int = 0
     var restWarm: Int = 90

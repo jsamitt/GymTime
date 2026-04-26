@@ -49,9 +49,15 @@ struct SettingsView: View {
                                 StepperRow(
                                     label: "Rep step",
                                     value: "±\(s.repStep)",
-                                    isLast: true,
                                     onMinus: { bumpInt(\.repStep, by: -1, min: 1, max: 5, on: s) },
                                     onPlus:  { bumpInt(\.repStep, by:  1, min: 1, max: 5, on: s) }
+                                )
+                                StepperRow(
+                                    label: "Loading sets",
+                                    value: "\(s.defaultLoadingSets)",
+                                    isLast: true,
+                                    onMinus: { bumpInt(\.defaultLoadingSets, by: -1, min: 1, max: 5, on: s) },
+                                    onPlus:  { bumpInt(\.defaultLoadingSets, by:  1, min: 1, max: 5, on: s) }
                                 )
                             }
                             SettingsGroup(label: "REPS PER SET") {

@@ -14,7 +14,9 @@ struct GymTimeLiveActivity: Widget {
             DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(context.state.setLabel)
+                        // Combined label + position so the user always knows
+                        // which set within the exercise they're on.
+                        Text(combinedSetHeader(context.state))
                             .font(.system(size: 10, weight: .semibold, design: .monospaced))
                             .foregroundColor(.green)
                         Text(context.state.exerciseName)
@@ -34,7 +36,9 @@ struct GymTimeLiveActivity: Widget {
                     }
                 }
                 DynamicIslandExpandedRegion(.bottom) {
-                    if let ends = context.state.restEndsAt {
+                    if context.state.isFlashing() {
+                        flashIslandBottom(context.state)
+                    } else if let ends = context.state.restEndsAt {
                         HStack {
                             Image(systemName: "timer")
                                 .foregroundColor(.blue)
@@ -46,7 +50,7 @@ struct GymTimeLiveActivity: Widget {
                                 .foregroundColor(.blue)
                                 .monospacedDigit()
                             Spacer()
-                            Text(context.state.setPosition)
+                            Text(context.state.templateName.uppercased())
                                 .font(.system(size: 11, design: .monospaced))
                                 .foregroundColor(.white.opacity(0.6))
                         }
@@ -56,17 +60,18 @@ struct GymTimeLiveActivity: Widget {
                                 .font(.system(size: 10, weight: .semibold, design: .monospaced))
                                 .foregroundColor(.white.opacity(0.6))
                             Spacer()
-                            Text(context.state.setPosition)
-                                .font(.system(size: 11, design: .monospaced))
-                                .foregroundColor(.white.opacity(0.6))
                         }
                     }
                 }
             } compactLeading: {
-                Image(systemName: "dumbbell.fill")
-                    .foregroundColor(.green)
+                Image(systemName: context.state.isFlashing() ? "checkmark.circle.fill" : "dumbbell.fill")
+                    .foregroundColor(context.state.isFlashing() ? .green : .green)
             } compactTrailing: {
-                if let ends = context.state.restEndsAt {
+                if context.state.isFlashing() {
+                    Text("GO")
+                        .font(.system(size: 12, weight: .bold, design: .monospaced))
+                        .foregroundColor(.green)
+                } else if let ends = context.state.restEndsAt {
                     Text(timerInterval: Date()...ends, countsDown: true)
                         .font(.system(size: 12, weight: .semibold, design: .monospaced))
                         .foregroundColor(.blue)
@@ -78,7 +83,10 @@ struct GymTimeLiveActivity: Widget {
                         .foregroundColor(.white)
                 }
             } minimal: {
-                if context.state.restEndsAt != nil {
+                if context.state.isFlashing() {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundColor(.green)
+                } else if context.state.restEndsAt != nil {
                     Image(systemName: "timer")
                         .foregroundColor(.blue)
                 } else {
@@ -87,6 +95,26 @@ struct GymTimeLiveActivity: Widget {
                 }
             }
         }
+    }
+
+    private func flashIslandBottom(_ state: GymTimeActivityAttributes.ContentState) -> some View {
+        HStack {
+            Image(systemName: "checkmark.circle.fill")
+                .foregroundColor(.green)
+            Text("REST DONE")
+                .font(.system(size: 12, weight: .bold, design: .monospaced))
+                .tracking(1.4)
+                .foregroundColor(.green)
+            Spacer()
+            Text("GO!")
+                .font(.system(size: 14, weight: .bold, design: .monospaced))
+                .foregroundColor(.green)
+        }
+    }
+
+    private func combinedSetHeader(_ state: GymTimeActivityAttributes.ContentState) -> String {
+        if state.setPosition.isEmpty { return state.setLabel }
+        return "\(state.setLabel) · \(state.setPosition)"
     }
 
     private func formatWeight(_ v: Double) -> String {
@@ -101,11 +129,18 @@ struct GymTimeLiveActivity: Widget {
 struct LockScreenView: View {
     let state: GymTimeActivityAttributes.ContentState
 
+    private var combinedHeader: String {
+        if state.setPosition.isEmpty { return state.setLabel }
+        return "\(state.setLabel) · \(state.setPosition)"
+    }
+
     var body: some View {
         HStack(alignment: .center, spacing: 14) {
             // Left: big weight + reps
             VStack(alignment: .leading, spacing: 2) {
-                Text(state.setLabel)
+                // Combined "LOADING SET 2 · 3 of 5" — set position lives
+                // inline with the label per user request.
+                Text(combinedHeader)
                     .font(.system(size: 10, weight: .semibold, design: .monospaced))
                     .tracking(1.1)
                     .foregroundColor(.green)
@@ -130,13 +165,16 @@ struct LockScreenView: View {
 
             Spacer(minLength: 8)
 
-            // Right: rest timer or template label
+            // Right: rest timer / flash / ready state
             VStack(alignment: .trailing, spacing: 4) {
-                Text(state.templateName.uppercased() + " · " + state.setPosition)
+                Text(state.templateName.uppercased())
                     .font(.system(size: 9, weight: .semibold, design: .monospaced))
                     .tracking(1.0)
                     .foregroundColor(.white.opacity(0.55))
-                if let ends = state.restEndsAt {
+
+                if state.isFlashing() {
+                    flashRight
+                } else if let ends = state.restEndsAt {
                     Text("REST")
                         .font(.system(size: 9, weight: .semibold, design: .monospaced))
                         .tracking(1.0)
@@ -160,6 +198,30 @@ struct LockScreenView: View {
         }
         .padding(.horizontal, 18)
         .padding(.vertical, 14)
+        .background(
+            // Subtle lime wash when the rest just ended so the whole banner
+            // visually pulses for a couple seconds.
+            state.isFlashing()
+                ? Color.green.opacity(0.18)
+                : Color.clear
+        )
+    }
+
+    private var flashRight: some View {
+        VStack(alignment: .trailing, spacing: 2) {
+            Text("REST DONE")
+                .font(.system(size: 11, weight: .bold, design: .monospaced))
+                .tracking(1.3)
+                .foregroundColor(.green)
+            HStack(spacing: 4) {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: 22))
+                    .foregroundColor(.green)
+                Text("GO")
+                    .font(.system(size: 22, weight: .bold, design: .monospaced))
+                    .foregroundColor(.green)
+            }
+        }
     }
 
     private func formatWeight(_ v: Double) -> String {

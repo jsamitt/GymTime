@@ -12,6 +12,11 @@ struct ActiveSetView: View {
     @State private var editingField: NumericEditField?
     @State private var showExitConfirm = false
     @State private var showSwapPicker = false
+    @State private var showWorkoutOverview = false
+    @State private var showAddExercisePicker = false
+    /// Set when the in-process timer fires; pushed into LA so the widget
+    /// can render its flash window. Cleared on next set/cursor change.
+    @State private var lastRestEndedAt: Date?
 
     private var cursor: (ExerciseLog, Int)? {
         controller.activeCursor()
@@ -49,10 +54,28 @@ struct ActiveSetView: View {
             UIApplication.shared.isIdleTimerDisabled = false
             LiveActivityController.shared.end()
         }
+        // Reactive Live-Activity refresh. Drives a single push site whenever
+        // any LA-relevant state changes — guarantees the widget never shows
+        // stale data regardless of which gesture triggered the underlying
+        // mutation. Replaces the previous scattered imperative push calls.
+        .onChange(of: currentSet?.id) { _, _ in
+            // New set/exercise — clear any stale flash state from prior rest.
+            lastRestEndedAt = nil
+            pushLiveActivityState()
+        }
+        .onChange(of: currentSet?.weight) { _, _ in pushLiveActivityState() }
+        .onChange(of: currentSet?.reps) { _, _ in pushLiveActivityState() }
+        .onChange(of: timer.plannedSec) { _, _ in pushLiveActivityState() }
+        .onChange(of: timer.isRunning) { _, _ in pushLiveActivityState() }
+        .onChange(of: timer.didFire) { _, fired in
+            if fired {
+                lastRestEndedAt = Date()
+                pushLiveActivityState()
+            }
+        }
         .sheet(item: $editingField) { field in
             NumericEditSheet(field: field, unit: settings.units.rawValue) {
                 controller.save()
-                pushLiveActivityState()
             }
             .presentationDetents([.fraction(0.35), .medium])
             .presentationDragIndicator(.visible)
@@ -64,8 +87,18 @@ struct ActiveSetView: View {
                     sessionLog: currentLog
                 ) { newExercise in
                     controller.swapCurrentExercise(to: newExercise)
-                    pushLiveActivityState()
                 }
+            }
+        }
+        .sheet(isPresented: $showWorkoutOverview) {
+            WorkoutOverviewSheet(
+                session: session,
+                currentSetID: currentSet?.id
+            )
+        }
+        .sheet(isPresented: $showAddExercisePicker) {
+            SessionExercisePickerSheet(session: session) { picked in
+                controller.appendExerciseToSession(picked)
             }
         }
         .confirmationDialog("Exit workout?", isPresented: $showExitConfirm, titleVisibility: .visible) {
@@ -93,7 +126,7 @@ struct ActiveSetView: View {
 
         VStack(spacing: 0) {
             // Header
-            HStack {
+            HStack(spacing: 6) {
                 iconCircle("chevron.down") { showExitConfirm = true }
                 Spacer()
                 VStack(spacing: 2) {
@@ -102,13 +135,36 @@ struct ActiveSetView: View {
                     Text(log.exerciseName)
                         .font(.gtDisplay(15, weight: .semibold))
                         .foregroundColor(GT.ink)
+                    if let next = nextExerciseName(after: log) {
+                        Text("NEXT · \(next.uppercased())")
+                            .font(.gtMono(9, weight: .medium))
+                            .tracking(1.0)
+                            .foregroundColor(GT.ink3)
+                            .lineLimit(1)
+                            .padding(.top, 1)
+                    }
                 }
                 Spacer()
+                // VIEW — see the entire workout in a sheet without exiting.
+                Button { showWorkoutOverview = true } label: {
+                    Image(systemName: "list.bullet")
+                        .font(.system(size: 14, weight: .medium))
+                        .frame(width: 36, height: 36)
+                        .background(Circle().fill(GT.surface2))
+                        .overlay(Circle().stroke(GT.line, lineWidth: 1))
+                        .foregroundColor(GT.ink2)
+                }
+                .buttonStyle(.plain)
                 Menu {
                     Button {
                         showSwapPicker = true
                     } label: {
                         Label("Swap exercise", systemImage: "arrow.triangle.2.circlepath")
+                    }
+                    Button {
+                        showAddExercisePicker = true
+                    } label: {
+                        Label("Add exercise to workout", systemImage: "plus")
                     }
                 } label: {
                     Image(systemName: "ellipsis")
@@ -313,13 +369,13 @@ struct ActiveSetView: View {
         set.weight = max(0, set.weight + delta)
         set.log?.enforceLoadingProgression()
         controller.save()
-        pushLiveActivityState()
+        // .onChange(of: currentSet?.weight) handles the LA push.
     }
 
     private func bumpReps(_ set: SetLog, by delta: Int) {
         set.reps = max(1, min(50, set.reps + delta))
         controller.save()
-        pushLiveActivityState()
+        // .onChange(of: currentSet?.reps) handles the LA push.
     }
 
     private var finishedOverlay: some View {
@@ -332,6 +388,25 @@ struct ActiveSetView: View {
             Text("Volume: \(GTMath.formatVolume(session.totalVolume)) lb")
                 .font(.gtDisplay(22, weight: .semibold))
                 .foregroundColor(GT.ink)
+
+            // Extend the workout with another exercise. Picking one
+            // re-activates the cursor since the new log has unlogged sets.
+            Button {
+                showAddExercisePicker = true
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "plus")
+                    Text("ADD EXERCISE")
+                }
+                .font(.gtDisplay(14, weight: .bold))
+                .tracking(0.4)
+                .foregroundColor(GT.ink)
+                .frame(width: 220, height: 46)
+                .background(Capsule().fill(GT.surface))
+                .overlay(Capsule().stroke(GT.line2, lineWidth: 1))
+            }
+            .buttonStyle(.plain)
+
             Button {
                 controller.finish()
                 onClose()
@@ -375,6 +450,25 @@ struct ActiveSetView: View {
         return loads.firstIndex(where: { $0.id == set.id })
     }
 
+    /// First exercise log after `currentLog` that still has unlogged sets.
+    /// Returns nil if there's no next exercise (we're on the last one) so
+    /// the caller can hide the hint.
+    private func nextExerciseName(after currentLog: ExerciseLog) -> String? {
+        let logs = session.orderedLogs
+        guard let i = logs.firstIndex(where: { $0.id == currentLog.id }) else { return nil }
+        for j in (i + 1)..<logs.count {
+            let log = logs[j]
+            // If the log has built sets, only show it as "next" if it still
+            // has work remaining. If sets aren't built yet, it's clearly
+            // upcoming.
+            let sets = log.orderedSets
+            if sets.isEmpty || sets.contains(where: { $0.loggedAt == nil && !$0.skipped }) {
+                return log.exerciseName
+            }
+        }
+        return nil
+    }
+
     private func lastSummary(for log: ExerciseLog) -> String {
         guard let ex = log.exercise, ex.topWorkingWeight > 0 else { return "—" }
         let reps = ex.effectiveReps(for: .load, loadingIndex: 0, settings: settings)
@@ -407,7 +501,8 @@ struct ActiveSetView: View {
         } else {
             timer.stop()
         }
-        pushLiveActivityState()
+        // The various .onChange modifiers in body push the LA state — no
+        // explicit push needed here.
     }
 
     // MARK: - Live Activity bridge
@@ -433,7 +528,8 @@ struct ActiveSetView: View {
             restStartedAt: timer.isRunning ? timer.startDate : nil,
             restPlannedSec: timer.isRunning ? timer.plannedSec : 0,
             templateName: session.templateName,
-            unit: settings.units.rawValue
+            unit: settings.units.rawValue,
+            restEndedAt: lastRestEndedAt
         )
         if starting {
             LiveActivityController.shared.start(state: state)

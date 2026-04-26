@@ -53,8 +53,13 @@ final class SessionController: ObservableObject {
         context.insert(warmSet)
         order += 1
 
-        // Loading sets
-        for i in 0..<max(1, ex.numLoadingSets) {
+        // Loading sets — count comes from per-exercise override if the user
+        // disabled "Use default", otherwise from the global AppSettings value.
+        let loadingCount: Int = {
+            let raw = ex.useDefaultLoadingSets ? settings.defaultLoadingSets : ex.numLoadingSets
+            return max(1, min(5, raw))
+        }()
+        for i in 0..<loadingCount {
             let rest = settings.plannedRest(for: .load, loadingIndex: i)
             let reps = ex.effectiveReps(for: .load, loadingIndex: i, settings: settings)
             let s = SetLog(kind: .load, weight: top, reps: reps, plannedRestSec: rest, order: order)
@@ -104,6 +109,18 @@ final class SessionController: ObservableObject {
     func abandon() {
         context.delete(session)
         try? context.save()
+    }
+
+    /// Append a new exercise to the end of the active session and build its
+    /// sets. Used for "extend workout" — adding an exercise from the
+    /// finishedOverlay or mid-workout. Cursor naturally re-activates because
+    /// the new log has unlogged sets.
+    func appendExerciseToSession(_ newExercise: Exercise) {
+        let nextOrder = (session.orderedLogs.map(\.order).max() ?? -1) + 1
+        let log = ExerciseLog(session: session, exercise: newExercise, order: nextOrder)
+        context.insert(log)
+        try? context.save()
+        buildSets(for: log)
     }
 
     /// Swap the current in-progress exercise with a different one (ad-hoc, does

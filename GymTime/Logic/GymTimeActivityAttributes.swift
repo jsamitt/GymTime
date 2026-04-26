@@ -23,6 +23,11 @@ struct GymTimeActivityAttributes: ActivityAttributes {
         var templateName: String
         /// Unit abbreviation ("lb" / "kg") for presentation.
         var unit: String
+        /// Timestamp pushed by the app the moment the in-process rest timer
+        /// fires. The widget compares this to `Date()` to render a brief
+        /// "REST DONE" flash; once a few seconds elapse the natural state
+        /// (no countdown) takes over.
+        var restEndedAt: Date?
 
         var isResting: Bool { restStartedAt != nil && restPlannedSec > 0 }
 
@@ -32,6 +37,12 @@ struct GymTimeActivityAttributes: ActivityAttributes {
         var restEndsAt: Date? {
             guard let start = restStartedAt else { return nil }
             return start.addingTimeInterval(TimeInterval(restPlannedSec))
+        }
+
+        /// True if the rest just ended within the flash window.
+        func isFlashing(at now: Date = .now, window: TimeInterval = 4) -> Bool {
+            guard let end = restEndedAt else { return false }
+            return now.timeIntervalSince(end) >= 0 && now.timeIntervalSince(end) < window
         }
     }
 }
