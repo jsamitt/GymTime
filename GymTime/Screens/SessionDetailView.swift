@@ -105,10 +105,10 @@ struct SessionDetailView: View {
                     .foregroundColor(GT.ink3)
             } else {
                 VStack(spacing: 6) {
-                    ForEach(Array(allSets.enumerated()), id: \.element.id) { idx, set in
+                    ForEach(allSets) { set in
                         if set.loggedAt != nil && !set.skipped {
                             setRow(
-                                label: SetLabeler.compactLabel(forSetAt: idx, totalSets: allSets.count),
+                                label: SetLabeler.compactLabel(forSet: set, in: allSets),
                                 weight: set.weight,
                                 reps: set.reps,
                                 primary: set.kind == .load

@@ -124,8 +124,7 @@ struct WorkoutOverviewSheet: View {
     @ViewBuilder
     private func setRow(set: SetLog, log: ExerciseLog) -> some View {
         let sets = log.orderedSets
-        let setIndex = sets.firstIndex(where: { $0.id == set.id }) ?? 0
-        let kindLabel = SetLabeler.compactLabel(forSetAt: setIndex, totalSets: sets.count)
+        let kindLabel = SetLabeler.compactLabel(forSet: set, in: sets)
         let isCurrent = set.id == currentSetID
         let logged = set.loggedAt != nil && !set.skipped
         let skipped = set.skipped

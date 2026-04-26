@@ -55,9 +55,13 @@ struct SettingsView: View {
                                 StepperRow(
                                     label: "Sets per exercise",
                                     value: "\(s.defaultTotalSets)",
-                                    isLast: true,
                                     onMinus: { bumpInt(\.defaultTotalSets, by: -1, min: 1, max: 7, on: s) },
                                     onPlus:  { bumpInt(\.defaultTotalSets, by:  1, min: 1, max: 7, on: s) }
+                                )
+                                ToggleRow(
+                                    label: "Perform Warmup 1 only on first exercise per muscle",
+                                    isOn: binding(for: \.coldWarmupOncePerMuscle),
+                                    isLast: true
                                 )
                             }
                             SettingsGroup(label: "REPS PER SET") {

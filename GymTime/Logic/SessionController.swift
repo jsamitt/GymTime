@@ -15,38 +15,51 @@ final class SessionController: ObservableObject {
         self.settings = settings
     }
 
-    /// Build SetLogs for a given exercise. Total set count is deterministic
-    /// per exercise (global default, or the per-exercise override) — there's
-    /// no muscle-history adjustment. SetLabeler decides how the count splits
-    /// between warmups and loads, and the same labeling is used at display
-    /// time.
+    /// Build SetLogs for a given exercise. Base total comes from the
+    /// per-exercise override or the global default. SetLabeler.warmupCount
+    /// /loadCount decide how the count splits between warmups and loads.
+    ///
+    /// When `AppSettings.coldWarmupOncePerMuscle` is on AND this exercise
+    /// has 4+ base sets AND another earlier log this session already
+    /// targeted the same primary muscle, the leading "Warmup 1" is dropped
+    /// — total sets reduces by one and the kept warmup becomes the kind=.warm
+    /// (heavier 75%) variant.
     func buildSets(for log: ExerciseLog) {
         guard let ex = log.exercise else { return }
         // Don't rebuild if already populated
         if !(log.sets ?? []).isEmpty { return }
 
-        let total: Int = {
+        let baseTotal: Int = {
             let raw = ex.useDefaultTotalSets ? settings.defaultTotalSets : ex.totalSets
             return max(1, min(7, raw))
         }()
-        let warmupCount = SetLabeler.warmupCount(forTotal: total)
-        let loadCount = SetLabeler.loadCount(forTotal: total)
+        let baseWarmups = SetLabeler.warmupCount(forTotal: baseTotal)
+        let baseLoads = SetLabeler.loadCount(forTotal: baseTotal)
+
+        let muscleKey = ex.primaryMuscle?.rawValue ?? ""
+        let shouldSkipW1 = settings.coldWarmupOncePerMuscle
+            && baseTotal >= 4
+            && muscleAlreadyWarmedUp(muscleKey, before: log)
+
+        let warmups = shouldSkipW1 ? max(0, baseWarmups - 1) : baseWarmups
+        let loads = baseLoads
+        // When skipping W1 the kept warmup is the second one — index its
+        // settings via offset so we use restWarm/warmPct/repsWarm.
+        let warmupKindOffset = shouldSkipW1 ? 1 : 0
 
         var order = 0
-        // Warmups. First warmup uses cold settings (rest/weight/reps), second
-        // uses warm settings. SetLabeler covers the display naming.
-        for i in 0..<warmupCount {
-            let kind: SetKind = i == 0 ? .cold : .warm
+        for i in 0..<warmups {
+            let kindIndex = i + warmupKindOffset
+            let kind: SetKind = kindIndex == 0 ? .cold : .warm
             let weight = ex.effectiveWeight(for: kind, settings: settings)
             let reps = ex.effectiveReps(for: kind, settings: settings)
-            let rest = i == 0 ? settings.restCold : settings.restWarm
+            let rest = kindIndex == 0 ? settings.restCold : settings.restWarm
             let s = SetLog(kind: kind, weight: weight, reps: reps, plannedRestSec: rest, order: order)
             s.log = log
             context.insert(s)
             order += 1
         }
-        // Loads.
-        for i in 0..<loadCount {
+        for i in 0..<loads {
             let rest = settings.plannedRest(for: .load, loadingIndex: i)
             let reps = ex.effectiveReps(for: .load, loadingIndex: i, settings: settings)
             let s = SetLog(kind: .load, weight: ex.topWorkingWeight, reps: reps, plannedRestSec: rest, order: order)
@@ -55,6 +68,22 @@ final class SessionController: ObservableObject {
             order += 1
         }
         try? context.save()
+    }
+
+    /// True if any earlier log this session targets the same primary muscle
+    /// AND already has built sets (i.e. the user has at least started warming
+    /// up that muscle group).
+    private func muscleAlreadyWarmedUp(_ muscleKey: String, before currentLog: ExerciseLog) -> Bool {
+        guard !muscleKey.isEmpty else { return false }
+        for other in session.orderedLogs where other.id != currentLog.id {
+            // Only count exercises that come BEFORE this one in the session.
+            guard other.order < currentLog.order else { continue }
+            // Must have at least one built set (otherwise it hasn't "warmed
+            // up" anything — could just be an empty placeholder).
+            guard !other.orderedSets.isEmpty else { continue }
+            if other.exercise?.primaryMuscle?.rawValue == muscleKey { return true }
+        }
+        return false
     }
 
     func logSet(_ s: SetLog) {

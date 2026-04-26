@@ -437,13 +437,10 @@ struct ActiveSetView: View {
     }
 
     /// Compact uppercased label for the current set (e.g. "WARMUP 1",
-    /// "LOAD 2", "SET 1"). Driven by SetLabeler so the names stay in sync
-    /// with the workout overview, history detail, and Live Activity.
+    /// "LOAD 2", "SET 1"). Uses the kind-aware variant so the "skipped
+    /// Warmup 1" case (1W + 3L instead of 2W + 2L) renders correctly.
     private func setLabel(set: SetLog, in sets: [SetLog]) -> String {
-        guard let idx = sets.firstIndex(where: { $0.id == set.id }) else {
-            return "SET"
-        }
-        return SetLabeler.compactLabel(forSetAt: idx, totalSets: sets.count)
+        return SetLabeler.compactLabel(forSet: set, in: sets)
     }
 
     /// First exercise log after `currentLog` that still has unlogged sets.
@@ -516,7 +513,7 @@ struct ActiveSetView: View {
         let currentSet = sets[idx]
         let state = GymTimeActivityAttributes.ContentState(
             exerciseName: log.exerciseName,
-            setLabel: SetLabeler.compactLabel(forSetAt: idx, totalSets: sets.count),
+            setLabel: SetLabeler.compactLabel(forSet: currentSet, in: sets),
             setPosition: "\(idx + 1) of \(sets.count)",
             weight: currentSet.weight,
             reps: currentSet.reps,

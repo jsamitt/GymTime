@@ -32,6 +32,11 @@ final class AppSettings {
     var autoAdvance: Bool = true
     var keepAwake: Bool = true
 
+    /// When true, the very first warmup ("Warmup 1") is dropped on any
+    /// 4-set-or-larger exercise after the first one targeting the same
+    /// primary muscle in a session. Default off.
+    var coldWarmupOncePerMuscle: Bool = false
+
     init() {}
 
     var units: Units {
