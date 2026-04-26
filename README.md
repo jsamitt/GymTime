@@ -188,10 +188,10 @@ are the building blocks for every screen.
 
 ## License
 
-This source is published under the
-[PolyForm Noncommercial License 1.0.0](LICENSE) — read it, learn from it,
-fork it, build on it for hobby / education / research / personal use. **Not
-licensed for commercial use.** A separate commercial release is in
-development under a different brand.
+Proprietary. Copyright © 2026 Jeff Samitt. All rights reserved.
 
-Copyright © 2026 Jeff Samitt.
+This is the private commercial branch of GymTime. The public, source-
+available, non-commercial mirror lives at
+[github.com/jsamitt/GymTime](https://github.com/jsamitt/GymTime) under
+the PolyForm Noncommercial License 1.0.0. Do not push commercial-version
+changes to that repo without intentionally cherry-picking them first.
