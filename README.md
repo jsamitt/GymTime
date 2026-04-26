@@ -185,3 +185,13 @@ Tokens live in [GT.swift](GymTime/DesignSystem/GT.swift) and mirror the JS
 `GT` object from the prototype's `lib/tokens.jsx`. Colors, type helpers
 (`.gtDisplay(size)`, `.gtMono(size)`), and the radii scale (`rSm/rMd/rLg/rXl`)
 are the building blocks for every screen.
+
+## License
+
+This source is published under the
+[PolyForm Noncommercial License 1.0.0](LICENSE) — read it, learn from it,
+fork it, build on it for hobby / education / research / personal use. **Not
+licensed for commercial use.** A separate commercial release is in
+development under a different brand.
+
+Copyright © 2026 Jeff Samitt.
