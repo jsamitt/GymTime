@@ -131,7 +131,8 @@ struct SessionExercisePickerSheet: View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 6) {
                 filterChip("ALL", value: nil)
-                ForEach([MuscleGroup.chest, .back, .quads, .shoulders, .biceps, .triceps], id: \.self) { m in
+                ForEach([MuscleGroup.chest, .back, .shoulders, .triceps, .biceps,
+                         .quads, .hamstrings, .glutes, .calves, .core, .forearms], id: \.self) { m in
                     filterChip(m.display.uppercased(), value: m)
                 }
             }

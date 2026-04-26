@@ -205,11 +205,18 @@ struct ExercisesPane: View {
         }
     }
 
+    /// Filter chips for every MuscleGroup case, ordered roughly the way
+    /// the exercise list groups them so the chips read top-down.
+    private static let filterMuscles: [MuscleGroup] = [
+        .chest, .back, .shoulders, .triceps, .biceps,
+        .quads, .hamstrings, .glutes, .calves, .core, .forearms,
+    ]
+
     private var filterChips: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 6) {
                 filterChip("ALL", value: nil)
-                ForEach([MuscleGroup.chest, .back, .quads, .shoulders, .biceps, .triceps], id: \.self) { m in
+                ForEach(Self.filterMuscles, id: \.self) { m in
                     filterChip(m.display.uppercased(), value: m)
                 }
             }
