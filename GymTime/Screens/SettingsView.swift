@@ -41,6 +41,12 @@ struct SettingsView: View {
                                     onPlus:  { bumpPct(\.warmPct, by:  0.05, on: s) }
                                 )
                                 StepperRow(
+                                    label: "Load 1 %",
+                                    value: "\(Int(s.load1Pct * 100))%",
+                                    onMinus: { bumpLoad1Pct(by: -0.05, on: s) },
+                                    onPlus:  { bumpLoad1Pct(by:  0.05, on: s) }
+                                )
+                                StepperRow(
                                     label: "Weight step",
                                     value: "±\(GTMath.formatWeight(s.weightStep)) \(s.units.rawValue)",
                                     onMinus: { cycleWeightStep(s, up: false) },
@@ -148,6 +154,14 @@ struct SettingsView: View {
     private func bumpPct(_ kp: ReferenceWritableKeyPath<AppSettings, Double>, by delta: Double, on s: AppSettings) {
         let next = ((s[keyPath: kp] + delta) * 100).rounded() / 100
         s[keyPath: kp] = min(0.95, max(0.20, next))
+        try? context.save()
+    }
+
+    /// Load 1 has a tighter range — 80–100% — since Load 1 is the
+    /// last-warmup-before-top set. Below 80% it overlaps with Warmup 2.
+    private func bumpLoad1Pct(by delta: Double, on s: AppSettings) {
+        let next = ((s.load1Pct + delta) * 100).rounded() / 100
+        s.load1Pct = min(1.0, max(0.80, next))
         try? context.save()
     }
 

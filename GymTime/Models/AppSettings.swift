@@ -9,6 +9,10 @@ final class AppSettings {
     var unitsRaw: String = Units.lb.rawValue
     var coldPct: Double = 0.50
     var warmPct: Double = 0.75
+    /// Load 1 weight as a fraction of `Exercise.topWorkingWeight`. Load 2+
+    /// always uses 100% of top. Default 95% gives a small "ramp-in" buffer
+    /// before the all-out top set.
+    var load1Pct: Double = 0.95
     var weightStep: Double = 5.0
     var repStep: Int = 1
     /// Default number of total sets per exercise (warmups + loads combined).

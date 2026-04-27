@@ -92,7 +92,11 @@ struct SessionDetailView: View {
                     .foregroundColor(GT.ink)
                 Spacer()
                 if let last = lastLoad {
-                    Text("TOP \(GTMath.formatWeight(last.weight)) × \(last.reps)")
+                    // Implied one-rep max from the heaviest logged loading
+                    // set (Epley). The exact weight × reps still appear in
+                    // the per-set rows below.
+                    let oneRM = Int(GTMath.epley1RM(weight: last.weight, reps: last.reps))
+                    Text("1RM \(oneRM) lb")
                         .font(.gtMono(10, weight: .semibold))
                         .tracking(1.0)
                         .foregroundColor(GT.lime)

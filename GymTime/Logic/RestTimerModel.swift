@@ -92,12 +92,12 @@ final class RestTimerModel: ObservableObject {
         let content = UNMutableNotificationContent()
         content.title = "Rest complete"
         content.body = "Set is ready."
-        // Silent on the iPhone, no banner break-through. The Live Activity
-        // already shows the timer ending visibly; this notification exists
-        // primarily so a paired Apple Watch still gets a haptic via the
-        // notification mirror.
-        content.sound = nil
-        content.interruptionLevel = .passive
+        // Use sound + active interruption — watchOS only reliably plays its
+        // haptic for a mirrored notification when the source notification
+        // would itself break through. Passive/silent killed the wrist buzz.
+        // The phone-side banner is the price of a reliable watch haptic.
+        content.sound = hapticOnEnd ? .default : nil
+        content.interruptionLevel = .active
         let trigger = UNTimeIntervalNotificationTrigger(timeInterval: TimeInterval(seconds), repeats: false)
         let id = UUID().uuidString
         let req = UNNotificationRequest(identifier: id, content: content, trigger: trigger)

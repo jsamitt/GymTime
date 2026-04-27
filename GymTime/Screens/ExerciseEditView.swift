@@ -50,12 +50,15 @@ struct ExerciseEditView: View {
         }
         for i in 0..<loads {
             let setIdx = warmups + i
+            // Load 1 honors load1Pct (default 95%); Load 2+ stays at 100%.
+            let weight = exercise.effectiveWeight(for: .load, loadingIndex: i, settings: settings)
+            let pct = i == 0 ? Int(settings.load1Pct * 100) : 100
             out.append(SetPreview(
                 kind: SetLabeler.compactLabel(forSetAt: setIdx, totalSets: total),
-                weight: exercise.topWorkingWeight,
+                weight: weight,
                 reps: exercise.effectiveReps(for: .load, loadingIndex: i, settings: settings),
                 rest: GTMath.mmss(settings.plannedRest(for: .load, loadingIndex: i)),
-                pct: 100,
+                pct: pct,
                 primary: true
             ))
         }
@@ -137,8 +140,8 @@ struct ExerciseEditView: View {
                         .padding(.bottom, 10)
                     trendCard
 
-                    // Warmup weight overrides
-                    Text("WARMUP WEIGHTS")
+                    // Warmup + Load 1 weight overrides
+                    Text("WORKING WEIGHTS")
                         .gtMonoCaption(size: 11, tracking: 1.5)
                         .padding(.top, 22)
                         .padding(.bottom, 10)
@@ -476,10 +479,19 @@ struct ExerciseEditView: View {
                 label: "Warmup 2",
                 override: exercise.weightWarmOverride,
                 computed: GTMath.warmupWeight(top: exercise.topWorkingWeight, pct: settings.warmPct, step: settings.weightStep),
-                pct: Int(settings.warmPct * 100),
-                isLast: true
+                pct: Int(settings.warmPct * 100)
             ) {
                 bumpWeightOverride(\.weightWarmOverride, by: $0)
+            }
+            Rectangle().fill(GT.line).frame(height: 1)
+            warmupWeightRow(
+                label: "Load 1",
+                override: exercise.weightLoad1Override,
+                computed: GTMath.warmupWeight(top: exercise.topWorkingWeight, pct: settings.load1Pct, step: settings.weightStep),
+                pct: Int(settings.load1Pct * 100),
+                isLast: true
+            ) {
+                bumpWeightOverride(\.weightLoad1Override, by: $0)
             }
         }
         .gtCard(radius: GT.rLg)
@@ -525,6 +537,8 @@ struct ExerciseEditView: View {
             computed = GTMath.warmupWeight(top: exercise.topWorkingWeight, pct: settings.coldPct, step: settings.weightStep)
         case \Exercise.weightWarmOverride:
             computed = GTMath.warmupWeight(top: exercise.topWorkingWeight, pct: settings.warmPct, step: settings.weightStep)
+        case \Exercise.weightLoad1Override:
+            computed = GTMath.warmupWeight(top: exercise.topWorkingWeight, pct: settings.load1Pct, step: settings.weightStep)
         default:
             computed = 0
         }

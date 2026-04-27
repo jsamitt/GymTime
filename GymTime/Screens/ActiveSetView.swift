@@ -7,6 +7,10 @@ struct ActiveSetView: View {
     @StateObject private var timer = RestTimerModel()
     let session: Session
     let settings: AppSettings
+    /// True only when the user just tapped START WORKOUT — drives a one-
+    /// shot "Weights re-based" toast that auto-fades. Resume-banner path
+    /// passes false.
+    var freshStart: Bool = false
     let onClose: () -> Void
 
     @State private var editingField: NumericEditField?
@@ -14,6 +18,8 @@ struct ActiveSetView: View {
     @State private var showSwapPicker = false
     @State private var showWorkoutOverview = false
     @State private var showAddExercisePicker = false
+    @State private var showSummary = false
+    @State private var showRebaseToast = false
     /// Set when the in-process timer fires; pushed into LA so the widget
     /// can render its flash window. Cleared on next set/cursor change.
     @State private var lastRestEndedAt: Date?
@@ -33,13 +39,20 @@ struct ActiveSetView: View {
     }
 
     var body: some View {
-        ZStack {
+        ZStack(alignment: .top) {
             GT.bg.ignoresSafeArea()
 
             if let set = currentSet, let log = cursor?.0 {
                 content(set: set, log: log)
             } else {
                 finishedOverlay
+            }
+
+            if showRebaseToast {
+                rebaseToast
+                    .padding(.top, 6)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                    .zIndex(2)
             }
         }
         .onAppear {
@@ -48,6 +61,13 @@ struct ActiveSetView: View {
                 UIApplication.shared.isIdleTimerDisabled = true
             }
             pushLiveActivityState(starting: true)
+            if freshStart {
+                withAnimation(.easeOut(duration: 0.25)) { showRebaseToast = true }
+                Task {
+                    try? await Task.sleep(nanoseconds: 3_000_000_000)
+                    withAnimation(.easeIn(duration: 0.4)) { showRebaseToast = false }
+                }
+            }
         }
         .onDisappear {
             timer.stop()
@@ -82,9 +102,10 @@ struct ActiveSetView: View {
         }
         .sheet(isPresented: $showSwapPicker) {
             if let (currentLog, _) = cursor, let currentEx = currentLog.exercise {
+                let sessionIds = Set(session.orderedLogs.compactMap { $0.exercise?.id })
                 ExerciseSwapPicker(
                     currentExercise: currentEx,
-                    sessionLog: currentLog
+                    excludedIds: sessionIds
                 ) { newExercise in
                     controller.swapCurrentExercise(to: newExercise)
                 }
@@ -365,6 +386,26 @@ struct ActiveSetView: View {
         .buttonStyle(.plain)
     }
 
+    /// One-shot banner shown on a fresh workout start. Mentions that the
+    /// app re-based weights using the most recent top working weight; the
+    /// recalculation itself happened silently in `buildSets`.
+    private var rebaseToast: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "scalemass")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundColor(GT.limeInk)
+            Text("Weights re-based on your last top working weight")
+                .font(.gtMono(11, weight: .medium))
+                .tracking(0.4)
+                .foregroundColor(GT.limeInk)
+                .lineLimit(2)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(Capsule().fill(GT.lime.opacity(0.95)))
+        .padding(.horizontal, 18)
+    }
+
     private func bumpWeight(_ set: SetLog, by delta: Double) {
         set.weight = max(0, set.weight + delta)
         set.log?.enforceLoadingProgression()
@@ -407,6 +448,27 @@ struct ActiveSetView: View {
             }
             .buttonStyle(.plain)
 
+            // Visual summary — same view History uses for past sessions,
+            // re-presented here so the user can review the lift breakdown
+            // before tapping DONE. Session is unfinished at this point but
+            // SessionDetailView reads orderedLogs/orderedSets directly so
+            // it works fine.
+            Button {
+                showSummary = true
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "list.bullet.rectangle")
+                    Text("VIEW SUMMARY")
+                }
+                .font(.gtDisplay(14, weight: .bold))
+                .tracking(0.4)
+                .foregroundColor(GT.ink)
+                .frame(width: 220, height: 46)
+                .background(Capsule().fill(GT.surface))
+                .overlay(Capsule().stroke(GT.line2, lineWidth: 1))
+            }
+            .buttonStyle(.plain)
+
             Button {
                 controller.finish()
                 onClose()
@@ -419,6 +481,9 @@ struct ActiveSetView: View {
                     .background(Capsule().fill(GT.lime))
             }
             .buttonStyle(.plain)
+        }
+        .sheet(isPresented: $showSummary) {
+            SessionDetailView(session: session)
         }
     }
 

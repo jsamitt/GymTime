@@ -62,7 +62,8 @@ final class SessionController: ObservableObject {
         for i in 0..<loads {
             let rest = settings.plannedRest(for: .load, loadingIndex: i)
             let reps = ex.effectiveReps(for: .load, loadingIndex: i, settings: settings)
-            let s = SetLog(kind: .load, weight: ex.topWorkingWeight, reps: reps, plannedRestSec: rest, order: order)
+            let weight = ex.effectiveWeight(for: .load, loadingIndex: i, settings: settings)
+            let s = SetLog(kind: .load, weight: weight, reps: reps, plannedRestSec: rest, order: order)
             s.log = log
             context.insert(s)
             order += 1

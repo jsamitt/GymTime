@@ -1,30 +1,30 @@
 import SwiftUI
 import SwiftData
 
-/// Mid-workout ad-hoc swap: pick another exercise from the same primary muscle
-/// group to substitute for the current one. Excludes exercises already used in
-/// this session to avoid accidental duplicates.
+/// Pick another exercise from the same primary muscle group to substitute
+/// for the current one. Used both mid-workout (excluding session
+/// exercises) and on the routine detail screen (excluding template
+/// exercises) — caller pre-computes the `excludedIds` so the picker
+/// itself stays neutral.
 struct ExerciseSwapPicker: View {
     @Environment(\.dismiss) private var dismiss
     @Query(sort: \Exercise.name) private var allExercises: [Exercise]
 
     let currentExercise: Exercise
-    let sessionLog: ExerciseLog
+    /// Exercise IDs to exclude from the candidate list (typically every
+    /// exercise already in the active session, or every exercise already in
+    /// the template being edited). The current exercise is always excluded.
+    let excludedIds: Set<UUID>
     let onSelect: (Exercise) -> Void
 
     private var muscle: MuscleGroup? { currentExercise.primaryMuscle }
-
-    private var sessionExerciseIds: Set<UUID> {
-        let logs = sessionLog.session?.orderedLogs ?? []
-        return Set(logs.compactMap { $0.exercise?.id })
-    }
 
     private var candidates: [Exercise] {
         guard let m = muscle else { return [] }
         return allExercises.filter { ex in
             ex.id != currentExercise.id
             && ex.primaryMuscle == m
-            && !sessionExerciseIds.contains(ex.id)
+            && !excludedIds.contains(ex.id)
         }
     }
 

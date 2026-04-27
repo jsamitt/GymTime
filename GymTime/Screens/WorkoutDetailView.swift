@@ -14,6 +14,7 @@ struct WorkoutDetailView: View {
     @State private var editMode: EditMode = .inactive
     @State private var editingName: Bool = false
     @State private var editingSubtitle: Bool = false
+    @State private var swapTarget: Exercise?
     @FocusState private var nameFocused: Bool
     @FocusState private var subtitleFocused: Bool
 
@@ -160,6 +161,9 @@ struct WorkoutDetailView: View {
                             Button { editingExercise = ex } label: {
                                 Label("Edit", systemImage: "pencil")
                             }
+                            Button { swapTarget = ex } label: {
+                                Label("Swap exercise", systemImage: "arrow.triangle.2.circlepath")
+                            }
                             Button { editMode = .active } label: {
                                 Label("Reorder exercises", systemImage: "arrow.up.arrow.down")
                             }
@@ -225,7 +229,7 @@ struct WorkoutDetailView: View {
             .ignoresSafeArea(edges: .bottom)
         }
         .fullScreenCover(item: $activeSession) { session in
-            ActiveSessionContainer(session: session)
+            ActiveSessionContainer(session: session, freshStart: true)
         }
         .sheet(item: $editingExercise) { ex in
             ExerciseEditView(exercise: ex)
@@ -233,6 +237,26 @@ struct WorkoutDetailView: View {
         .sheet(isPresented: $showAddExercise) {
             ExercisePickerView(template: template)
         }
+        .sheet(item: $swapTarget) { ex in
+            // Excludes every exercise already in this template so we don't
+            // create duplicates. Same-muscle filter is applied by the picker.
+            let templateIds = Set(template.orderedExercises.compactMap { $0.exercise?.id })
+            ExerciseSwapPicker(
+                currentExercise: ex,
+                excludedIds: templateIds
+            ) { replacement in
+                swapTemplateExercise(ex, with: replacement)
+            }
+        }
+    }
+
+    /// Replace `ex` with `replacement` on the underlying TemplateExercise
+    /// (preserves order). Doesn't touch any past sessions — those remain
+    /// linked to the exercise they were logged with.
+    private func swapTemplateExercise(_ ex: Exercise, with replacement: Exercise) {
+        guard let entry = (template.templateExercises ?? []).first(where: { $0.exercise?.id == ex.id }) else { return }
+        entry.exercise = replacement
+        try? context.save()
     }
 
     private func iconCircle(_ systemName: String, action: @escaping () -> Void = {}) -> some View {
@@ -390,12 +414,22 @@ struct ActiveSessionContainer: View {
     @Environment(\.modelContext) private var context
     @Query private var settingsList: [AppSettings]
     let session: Session
+    /// True when this container is opened from a brand-new
+    /// `WorkoutDetailView.startWorkout()` call, false when resuming an
+    /// existing session from the Home banner. Drives the one-shot
+    /// "Weights re-based" toast in ActiveSetView.
+    var freshStart: Bool = false
     @State private var controller: SessionController?
 
     var body: some View {
         Group {
             if let settings = settingsList.first, let controller {
-                ActiveSetView(controller: controller, session: session, settings: settings) {
+                ActiveSetView(
+                    controller: controller,
+                    session: session,
+                    settings: settings,
+                    freshStart: freshStart
+                ) {
                     dismiss()
                 }
             } else {

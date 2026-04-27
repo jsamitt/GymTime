@@ -53,9 +53,11 @@ final class Exercise {
     var repsLoad2Override: Int = 0
 
     // Per-exercise warmup weight overrides. 0 = use the pct formula.
-    // (Loading sets always use topWorkingWeight.)
     var weightColdOverride: Double = 0
     var weightWarmOverride: Double = 0
+    /// Per-exercise Load 1 weight override. 0 = use settings.load1Pct of
+    /// topWorkingWeight (default 95%). Load 2+ always uses topWorkingWeight.
+    var weightLoad1Override: Double = 0
 
     // Inverses required by CloudKit sync — deleting an exercise nullifies
     // references rather than cascading so history is preserved.
@@ -95,9 +97,13 @@ final class Exercise {
     }
     var primaryMuscle: MuscleGroup? { muscleGroups.first }
 
-    /// Weight for the given set kind. Warmups use a per-exercise override if set,
-    /// else the AppSettings pct formula. Loading sets always use topWorkingWeight.
-    func effectiveWeight(for kind: SetKind, settings: AppSettings?) -> Double {
+    /// Weight for the given set kind. Warmups + Load 1 use per-exercise
+    /// overrides if set, else the AppSettings pct formula. Load 2+ always
+    /// uses topWorkingWeight (the all-out top set).
+    ///
+    /// `loadingIndex` is only meaningful for `.load` and is ignored for
+    /// warmup kinds.
+    func effectiveWeight(for kind: SetKind, loadingIndex: Int = 0, settings: AppSettings?) -> Double {
         let s = settings ?? AppSettings()
         switch kind {
         case .cold:
@@ -107,6 +113,10 @@ final class Exercise {
             if weightWarmOverride > 0 { return weightWarmOverride }
             return GTMath.warmupWeight(top: topWorkingWeight, pct: s.warmPct, step: s.weightStep)
         case .load:
+            if loadingIndex == 0 {
+                if weightLoad1Override > 0 { return weightLoad1Override }
+                return GTMath.warmupWeight(top: topWorkingWeight, pct: s.load1Pct, step: s.weightStep)
+            }
             return topWorkingWeight
         }
     }

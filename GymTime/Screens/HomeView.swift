@@ -19,48 +19,55 @@ struct HomeView: View {
     var body: some View {
         ZStack {
             GT.bg.ignoresSafeArea()
-            ScrollView {
-                VStack(alignment: .leading, spacing: 0) {
-                    header
+            // Pinned area (header + resume banner + stats) lives outside
+            // the ScrollView so it stays put while routines scroll.
+            VStack(alignment: .leading, spacing: 0) {
+                header
+                    .padding(.horizontal, 20)
+                    .padding(.top, 10)
 
-                    if let s = activeSession {
-                        Button { resumingSession = s } label: {
-                            resumeBanner(for: s)
-                        }
-                        .buttonStyle(.plain)
-                        .padding(.top, 16)
+                if let s = activeSession {
+                    Button { resumingSession = s } label: {
+                        resumeBanner(for: s)
                     }
+                    .buttonStyle(.plain)
+                    .padding(.horizontal, 20)
+                    .padding(.top, 16)
+                }
 
-                    // Stats row
-                    HStack(spacing: 10) {
-                        StatTile(label: "Streak", value: "\(streakDays)", unit: "d", accent: true)
-                        StatTile(label: "This wk", value: "\(weekCount)", unit: "/4")
-                        StatTile(label: "Volume", value: GTMath.formatVolume(weekVolume), unit: "")
-                    }
-                    .padding(.top, 22)
-
-                    Text("ROUTINES")
-                        .gtMonoCaption(size: 11, tracking: 1.6)
-                        .padding(.top, 22)
-                        .padding(.bottom, 12)
-
-                    if templates.isEmpty {
-                        emptyTemplatesHint
-                    } else {
-                        VStack(spacing: 10) {
-                            ForEach(templates) { t in
-                                Button { activeTemplate = t } label: {
-                                    WorkoutCard(template: t, lastLabel: lastLabel(for: t))
-                                }
-                                .buttonStyle(.plain)
-                            }
-                        }
-                    }
-
-                    Color.clear.frame(height: 40)
+                HStack(spacing: 10) {
+                    StatTile(label: "Streak", value: "\(streakDays)", unit: "d", accent: true)
+                    StatTile(label: "Days this wk", value: "\(daysTrainedThisWeek)", unit: "/7")
+                    StatTile(label: "Volume", value: GTMath.formatVolume(weekVolume), unit: "")
                 }
                 .padding(.horizontal, 20)
-                .padding(.top, 10)
+                .padding(.top, 22)
+                .padding(.bottom, 4)
+
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text("ROUTINES")
+                            .gtMonoCaption(size: 11, tracking: 1.6)
+                            .padding(.top, 18)
+                            .padding(.bottom, 12)
+
+                        if templates.isEmpty {
+                            emptyTemplatesHint
+                        } else {
+                            VStack(spacing: 10) {
+                                ForEach(templates) { t in
+                                    Button { activeTemplate = t } label: {
+                                        WorkoutCard(template: t, lastLabel: lastLabel(for: t))
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
+                        }
+
+                        Color.clear.frame(height: 40)
+                    }
+                    .padding(.horizontal, 20)
+                }
             }
         }
         .fullScreenCover(item: $activeTemplate) { t in
@@ -147,10 +154,17 @@ struct HomeView: View {
         return count
     }
 
-    private var weekCount: Int {
+    /// Unique calendar days this week with at least one finished session —
+    /// a more useful frequency signal than session count (which double-counts
+    /// when you do two-a-days).
+    private var daysTrainedThisWeek: Int {
         let cal = Calendar.current
-        let startOfWeek = cal.dateInterval(of: .weekOfYear, for: Date())?.start ?? Date()
-        return finishedSessions.filter { ($0.finishedAt ?? Date()) >= startOfWeek }.count
+        guard let weekStart = cal.dateInterval(of: .weekOfYear, for: Date())?.start else { return 0 }
+        let days = Set(finishedSessions.compactMap { s -> Date? in
+            guard let end = s.finishedAt, end >= weekStart else { return nil }
+            return cal.startOfDay(for: end)
+        })
+        return days.count
     }
 
     private var weekVolume: Double {
