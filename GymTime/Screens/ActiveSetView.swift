@@ -78,6 +78,17 @@ struct ActiveSetView: View {
         // any LA-relevant state changes — guarantees the widget never shows
         // stale data regardless of which gesture triggered the underlying
         // mutation. Replaces the previous scattered imperative push calls.
+        // Exercise-boundary observer. Fires whenever the cursor's LOG
+        // changes (independent of the set), so a swap/append/skip that
+        // jumps to a different ExerciseLog forces a build + push even if
+        // the new log's sets haven't surfaced via the .id observer yet.
+        .onChange(of: cursor?.0.id) { _, _ in
+            if let (log, _) = cursor, (log.sets ?? []).isEmpty {
+                controller.buildSets(for: log)
+            }
+            lastRestEndedAt = nil
+            pushLiveActivityState()
+        }
         .onChange(of: currentSet?.id) { _, _ in
             // New set/exercise — clear any stale flash state from prior rest.
             lastRestEndedAt = nil
@@ -108,6 +119,10 @@ struct ActiveSetView: View {
                     excludedIds: sessionIds
                 ) { newExercise in
                     controller.swapCurrentExercise(to: newExercise)
+                    // Belt + suspenders alongside .onChange: synchronously
+                    // push the new state so the LA flips immediately, even
+                    // if the @Observation pass hasn't fired yet.
+                    pushLiveActivityState()
                 }
             }
         }
@@ -120,6 +135,11 @@ struct ActiveSetView: View {
         .sheet(isPresented: $showAddExercisePicker) {
             SessionExercisePickerSheet(session: session) { picked in
                 controller.appendExerciseToSession(picked)
+                // Explicit push so the LA reflects the appended exercise
+                // immediately (including the extend-from-finishedOverlay
+                // path, where the view also needs to flip from completion
+                // back to the active set).
+                pushLiveActivityState()
             }
         }
         .confirmationDialog("Exit workout?", isPresented: $showExitConfirm, titleVisibility: .visible) {
@@ -289,8 +309,24 @@ struct ActiveSetView: View {
                     .padding(.bottom, 8)
             }
 
-            // Bottom bar
-            HStack(spacing: 10) {
+            // Bottom bar — dedicated Skip-Exercise button (defer for later)
+            // sits to the left of the existing per-set SKIP and LOG SET
+            // buttons. Narrower than SKIP so LOG SET keeps visual primacy.
+            HStack(spacing: 8) {
+                Button {
+                    controller.deferCurrentExercise()
+                    pushLiveActivityState()
+                } label: {
+                    Image(systemName: "arrow.uturn.forward")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundColor(GT.ink)
+                        .frame(width: 56, height: 56)
+                        .background(Capsule().fill(GT.surface))
+                        .overlay(Capsule().stroke(GT.line2, lineWidth: 1))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Skip exercise (come back later)")
+
                 Button { logButtonTapped(nil, skip: true, currentSet: set) } label: {
                     HStack(spacing: 8) {
                         Image(systemName: "forward.end.fill")
@@ -570,11 +606,17 @@ struct ActiveSetView: View {
             LiveActivityController.shared.end()
             return
         }
-        let sets = log.orderedSets
-        guard idx < sets.count else {
-            LiveActivityController.shared.end()
-            return
+        // Defensive: when the cursor just crossed onto a fresh log (swap
+        // or append), its sets may not be built yet. Build synchronously
+        // here so we never push (or end) with an empty sets array. If sets
+        // STILL look empty after the build attempt — SwiftData relationship
+        // hasn't surfaced this render — skip the push entirely rather than
+        // ending the activity. The next reactive trigger will retry.
+        if (log.sets ?? []).isEmpty {
+            controller.buildSets(for: log)
         }
+        let sets = log.orderedSets
+        guard idx < sets.count else { return }
         let currentSet = sets[idx]
         let state = GymTimeActivityAttributes.ContentState(
             exerciseName: log.exerciseName,

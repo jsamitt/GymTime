@@ -184,14 +184,37 @@ final class SessionController: ObservableObject {
     /// Return (log, setIndex) of the currently active set, or nil if done.
     /// Logs with no sets yet are treated as "upcoming" — sets will be built
     /// on demand when this log becomes active.
+    ///
+    /// Two-pass: first walks non-deferred logs in template order, then
+    /// returns to deferred logs in original order. A user-initiated "Skip
+    /// exercise (come back later)" sets `deferredAt` on the current log;
+    /// the cursor will revisit it once everything else this session is done.
     func activeCursor() -> (ExerciseLog, Int)? {
-        for log in session.orderedLogs {
-            let sets = log.orderedSets
-            if sets.isEmpty { return (log, 0) }
-            if let idx = sets.firstIndex(where: { $0.loggedAt == nil && !$0.skipped }) {
-                return (log, idx)
-            }
+        for log in session.orderedLogs where log.deferredAt == nil {
+            if let c = cursor(within: log) { return c }
+        }
+        for log in session.orderedLogs where log.deferredAt != nil {
+            if let c = cursor(within: log) { return c }
         }
         return nil
+    }
+
+    private func cursor(within log: ExerciseLog) -> (ExerciseLog, Int)? {
+        let sets = log.orderedSets
+        if sets.isEmpty { return (log, 0) }
+        if let idx = sets.firstIndex(where: { $0.loggedAt == nil && !$0.skipped }) {
+            return (log, idx)
+        }
+        return nil
+    }
+
+    /// Mark the current log as deferred so the cursor jumps past it. The
+    /// next time `activeCursor()` runs, it picks the next non-deferred log;
+    /// once all of those are exhausted, the deferred logs come back in
+    /// their original template order.
+    func deferCurrentExercise() {
+        guard let (log, _) = activeCursor() else { return }
+        log.deferredAt = Date()
+        try? context.save()
     }
 }

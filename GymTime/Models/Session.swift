@@ -58,6 +58,11 @@ final class ExerciseLog {
     var session: Session?
     var exercise: Exercise?
     var exerciseName: String = ""
+    /// Timestamp set when the user taps "Skip exercise (come back later)"
+    /// during a workout. The cursor passes over deferred logs on its
+    /// first pass; after all non-deferred logs are exhausted, it returns
+    /// to deferred ones in their original `order`.
+    var deferredAt: Date?
 
     @Relationship(deleteRule: .cascade, inverse: \SetLog.log)
     var sets: [SetLog]? = []

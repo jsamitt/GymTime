@@ -92,6 +92,7 @@ struct WorkoutOverviewSheet: View {
         let sets = log.orderedSets
         let isCurrentExercise = sets.contains { $0.id == currentSetID }
         let allDone = !sets.isEmpty && sets.allSatisfy { $0.loggedAt != nil || $0.skipped }
+        let isDeferred = log.deferredAt != nil && !allDone && !isCurrentExercise
         return VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .firstTextBaseline) {
                 Text(log.exerciseName)
@@ -101,6 +102,8 @@ struct WorkoutOverviewSheet: View {
                 Spacer()
                 if isCurrentExercise {
                     statusPill("NOW", lime: true)
+                } else if isDeferred {
+                    statusPill("LATER", lime: false, dim: false)
                 } else if allDone {
                     statusPill("DONE", lime: false, dim: true)
                 }
