@@ -219,14 +219,39 @@ struct ActiveSetView: View {
             .padding(.horizontal, 20)
             .padding(.top, 10)
 
-            // Label pill
-            Pill(accent: true) {
-                Image(systemName: "scope")
-                    .font(.system(size: 11))
-                    .foregroundColor(GT.lime)
-                Text(setLabel(set: set, in: sets))
-                    .font(.gtMono(11, weight: .medium))
-                    .tracking(0.3)
+            // Label row — Unskip pill (when something's deferred) sits to
+            // the left of the set-kind pill. Tapping Unskip un-defers the
+            // earliest queued exercise so the cursor returns to it; the
+            // current in-progress exercise stays partial and the cursor
+            // will come back to it after the un-deferred one finishes.
+            HStack(spacing: 8) {
+                if controller.hasDeferredExercises {
+                    Button {
+                        controller.undeferNext()
+                        pushLiveActivityState()
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "arrow.uturn.backward")
+                                .font(.system(size: 10, weight: .semibold))
+                            Text("UNSKIP")
+                                .font(.gtMono(11, weight: .semibold))
+                                .tracking(0.6)
+                        }
+                        .foregroundColor(GT.limeInk)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(Capsule().fill(GT.lime))
+                    }
+                    .buttonStyle(.plain)
+                }
+                Pill(accent: true) {
+                    Image(systemName: "scope")
+                        .font(.system(size: 11))
+                        .foregroundColor(GT.lime)
+                    Text(setLabel(set: set, in: sets))
+                        .font(.gtMono(11, weight: .medium))
+                        .tracking(0.3)
+                }
             }
             .padding(.top, 22)
 
@@ -309,55 +334,71 @@ struct ActiveSetView: View {
                     .padding(.bottom, 8)
             }
 
-            // Bottom bar — dedicated Skip-Exercise button (defer for later)
-            // sits to the left of the existing per-set SKIP and LOG SET
-            // buttons. Narrower than SKIP so LOG SET keeps visual primacy.
+            // Bottom bar: three equal-width capsule buttons.
+            // Skip Ex (defer the entire exercise), Skip Set (skip current
+            // set only), Log Set (primary lime action).
             HStack(spacing: 8) {
-                Button {
+                bottomBarButton(
+                    title: "Skip Ex",
+                    icon: "arrow.uturn.forward",
+                    isPrimary: false,
+                    accessibility: "Skip exercise (come back later)"
+                ) {
                     controller.deferCurrentExercise()
                     pushLiveActivityState()
-                } label: {
-                    Image(systemName: "arrow.uturn.forward")
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundColor(GT.ink)
-                        .frame(width: 56, height: 56)
-                        .background(Capsule().fill(GT.surface))
-                        .overlay(Capsule().stroke(GT.line2, lineWidth: 1))
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Skip exercise (come back later)")
 
-                Button { logButtonTapped(nil, skip: true, currentSet: set) } label: {
-                    HStack(spacing: 8) {
-                        Image(systemName: "forward.end.fill")
-                        Text("SKIP")
-                    }
-                    .font(.gtDisplay(15, weight: .semibold))
-                    .foregroundColor(GT.ink)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 56)
-                    .background(Capsule().fill(GT.surface))
-                    .overlay(Capsule().stroke(GT.line2, lineWidth: 1))
+                bottomBarButton(
+                    title: "Skip Set",
+                    icon: "forward.end.fill",
+                    isPrimary: false
+                ) {
+                    logButtonTapped(nil, skip: true, currentSet: set)
                 }
-                .buttonStyle(.plain)
 
-                Button { logButtonTapped(set, skip: false, currentSet: set) } label: {
-                    HStack(spacing: 10) {
-                        Image(systemName: "checkmark")
-                        Text("LOG SET")
-                    }
-                    .font(.gtDisplay(16, weight: .bold))
-                    .tracking(-0.2)
-                    .foregroundColor(GT.limeInk)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 56)
-                    .background(Capsule().fill(GT.lime))
+                bottomBarButton(
+                    title: "Log Set",
+                    icon: "checkmark",
+                    isPrimary: true
+                ) {
+                    logButtonTapped(set, skip: false, currentSet: set)
                 }
-                .buttonStyle(.plain)
             }
             .padding(.horizontal, 20)
             .padding(.bottom, 34)
         }
+    }
+
+    /// Equal-width bottom-bar button. `isPrimary` switches between the
+    /// lime "log set" fill and the surface "secondary action" style.
+    @ViewBuilder
+    private func bottomBarButton(
+        title: String,
+        icon: String,
+        isPrimary: Bool,
+        accessibility: String? = nil,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                Image(systemName: icon)
+                    .font(.system(size: 14, weight: isPrimary ? .bold : .semibold))
+                Text(title)
+                    .font(.gtDisplay(15, weight: isPrimary ? .bold : .semibold))
+                    .tracking(isPrimary ? -0.2 : 0)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
+            .foregroundColor(isPrimary ? GT.limeInk : GT.ink)
+            .frame(maxWidth: .infinity)
+            .frame(height: 56)
+            .background(Capsule().fill(isPrimary ? GT.lime : GT.surface))
+            .overlay(
+                Capsule().stroke(isPrimary ? Color.clear : GT.line2, lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(accessibility ?? title)
     }
 
     private var restBlock: some View {

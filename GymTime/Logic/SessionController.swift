@@ -217,4 +217,35 @@ final class SessionController: ObservableObject {
         log.deferredAt = Date()
         try? context.save()
     }
+
+    /// Un-defer the earliest (by template order) deferred log that still
+    /// has unlogged sets. Called when the user taps the "Unskip" pill — the
+    /// cursor then naturally advances to that log on its next evaluation.
+    /// Returns true if a log was un-deferred.
+    @discardableResult
+    func undeferNext() -> Bool {
+        let candidates = session.orderedLogs.filter { log in
+            guard log.deferredAt != nil else { return false }
+            let sets = log.orderedSets
+            if sets.isEmpty { return true }
+            return sets.contains(where: { $0.loggedAt == nil && !$0.skipped })
+        }
+        guard let target = candidates.first else { return false }
+        target.deferredAt = nil
+        try? context.save()
+        return true
+    }
+
+    /// Whether at least one deferred log this session still has unlogged
+    /// sets. Drives the "Unskip" pill visibility in ActiveSetView.
+    var hasDeferredExercises: Bool {
+        for log in session.orderedLogs where log.deferredAt != nil {
+            let sets = log.orderedSets
+            if sets.isEmpty { return true }
+            if sets.contains(where: { $0.loggedAt == nil && !$0.skipped }) {
+                return true
+            }
+        }
+        return false
+    }
 }
