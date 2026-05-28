@@ -17,6 +17,19 @@ final class LiveActivityController {
 
     var isRunning: Bool { activity != nil }
 
+    /// Start the activity if it isn't running, otherwise update it. This is
+    /// the single entry point callers should use — it survives the case
+    /// where the workout completed (which ends the activity) and is then
+    /// extended with another exercise, which must re-start a fresh activity
+    /// rather than no-op an `update` on a dead one.
+    func upsert(state: GymTimeActivityAttributes.ContentState) {
+        if activity != nil {
+            update(state: state)
+        } else {
+            start(state: state)
+        }
+    }
+
     func start(state: GymTimeActivityAttributes.ContentState) {
         // Avoid duplicate starts — update in place if already running.
         if activity != nil {

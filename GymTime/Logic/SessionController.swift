@@ -6,6 +6,17 @@ import SwiftData
 @MainActor
 final class SessionController: ObservableObject {
     @Published var session: Session
+    /// Bumped on every structural mutation (log, skip, swap, append, defer,
+    /// undefer, finish). ActiveSetView observes this controller via
+    /// @ObservedObject, but `session` is a stable reference whose child
+    /// log/set mutations don't fire objectWillChange on their own. Bumping
+    /// this @Published value forces the view to re-render → recompute the
+    /// cursor → update both the on-screen UI and the Live Activity.
+    ///
+    /// NOTE: never bump from `buildSets`, which is invoked lazily during
+    /// view body evaluation (via the `currentSet` getter) — mutating
+    /// published state mid-render is illegal.
+    @Published private(set) var revision = 0
     private let context: ModelContext
     private let settings: AppSettings
 
@@ -14,6 +25,8 @@ final class SessionController: ObservableObject {
         self.context = context
         self.settings = settings
     }
+
+    private func bumpRevision() { revision &+= 1 }
 
     /// Build SetLogs for a given exercise. Base total comes from the
     /// per-exercise override or the global default. SetLabeler.warmupCount
@@ -90,18 +103,21 @@ final class SessionController: ObservableObject {
     func logSet(_ s: SetLog) {
         s.loggedAt = Date()
         try? context.save()
+        bumpRevision()
     }
 
     func skipSet(_ s: SetLog) {
         s.skipped = true
         s.loggedAt = Date()
         try? context.save()
+        bumpRevision()
     }
 
     func finish() {
         consolidateExerciseWeights()
         session.finishedAt = Date()
         try? context.save()
+        bumpRevision()
     }
 
     /// After a workout, carry the final loading-set weight forward to the
@@ -134,6 +150,7 @@ final class SessionController: ObservableObject {
         context.insert(log)
         try? context.save()
         buildSets(for: log)
+        bumpRevision()
     }
 
     /// Swap the current in-progress exercise with a different one (ad-hoc, does
@@ -173,6 +190,7 @@ final class SessionController: ObservableObject {
             try? context.save()
             buildSets(for: currentLog)
         }
+        bumpRevision()
     }
 
     /// Persist ad-hoc edits to attached models (e.g. mutating a SetLog's weight
@@ -216,6 +234,7 @@ final class SessionController: ObservableObject {
         guard let (log, _) = activeCursor() else { return }
         log.deferredAt = Date()
         try? context.save()
+        bumpRevision()
     }
 
     /// Un-defer the earliest (by template order) deferred log that still
@@ -233,6 +252,7 @@ final class SessionController: ObservableObject {
         guard let target = candidates.first else { return false }
         target.deferredAt = nil
         try? context.save()
+        bumpRevision()
         return true
     }
 

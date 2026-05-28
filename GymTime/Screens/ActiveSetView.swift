@@ -636,8 +636,11 @@ struct ActiveSetView: View {
         } else {
             timer.stop()
         }
-        // The various .onChange modifiers in body push the LA state — no
-        // explicit push needed here.
+        // Explicit push: at this point the next log's sets are built (above),
+        // so the LA reflects the new exercise deterministically instead of
+        // racing the transient empty-sets window across an exercise boundary.
+        lastRestEndedAt = nil
+        pushLiveActivityState()
     }
 
     // MARK: - Live Activity bridge
@@ -671,11 +674,11 @@ struct ActiveSetView: View {
             unit: settings.units.rawValue,
             restEndedAt: lastRestEndedAt
         )
-        if starting {
-            LiveActivityController.shared.start(state: state)
-        } else {
-            LiveActivityController.shared.update(state: state)
-        }
+        // upsert starts the activity if it isn't running (handles the
+        // extend-after-complete case where the activity was ended), else
+        // updates it. `starting` no longer needs special handling.
+        _ = starting
+        LiveActivityController.shared.upsert(state: state)
     }
 }
 
