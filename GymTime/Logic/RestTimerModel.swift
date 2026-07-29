@@ -28,6 +28,29 @@ final class RestTimerModel: ObservableObject {
 
     func start(planned: Int, hapticOnEnd: Bool) {
         invalidate()
+        // Kill the previous set's rest entirely before (re)starting. invalidate()
+        // above drops the in-process tick timer, but the pending background
+        // notification must be cancelled here too: scheduleBackgroundFallback
+        // overwrites pendingNotificationId with a fresh UUID, so without this
+        // the earlier set's notification is orphaned and still fires a stale
+        // "Rest complete" alert/haptic when you log or skip before it elapses.
+        cancelBackgroundFallback()
+        // A non-positive planned rest (cold warmups use restCold = 0) means
+        // "no rest", not a running 0-second rest. Starting a live timer with
+        // plannedSec == 0 leaves isRunning true forever — showing a stuck
+        // 0:00 rest block in-app and pushing a Live-Activity state whose
+        // restEndsAt == restStartedAt, which inverts the widget's
+        // `Date()...ends` countdown range and freezes the activity. That was
+        // the first (cold) set of every new-muscle exercise appearing not to
+        // render or progress. Reset to a clean stopped state instead.
+        guard planned > 0 else {
+            plannedSec = 0
+            elapsed = 0
+            didFire = false
+            isRunning = false
+            startDate = nil
+            return
+        }
         self.plannedSec = planned
         self.hapticEnabled = hapticOnEnd
         self.startDate = Date()
@@ -63,7 +86,15 @@ final class RestTimerModel: ObservableObject {
 
     private func tick() {
         guard let start = startDate else { return }
-        elapsed = Int(Date().timeIntervalSince(start))
+        // Poll at 0.1s so didFire/haptic timing stays tight, but only
+        // publish `elapsed` when the displayed second actually changes —
+        // otherwise this republishes 10x/sec, forcing ActiveSetView's
+        // entire body (including the ··· menu) to re-render that often
+        // and intermittently swallowing taps mid-render.
+        let seconds = Int(Date().timeIntervalSince(start))
+        if seconds != elapsed {
+            elapsed = seconds
+        }
         if !didFire, elapsed >= plannedSec, plannedSec > 0 {
             didFire = true
             fireHaptic()

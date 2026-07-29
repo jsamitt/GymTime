@@ -39,8 +39,11 @@ final class SessionController: ObservableObject {
     /// (heavier 75%) variant.
     func buildSets(for log: ExerciseLog) {
         guard let ex = log.exercise else { return }
-        // Don't rebuild if already populated
-        if !(log.sets ?? []).isEmpty { return }
+
+        let existing = log.orderedSets
+        // Once any set is logged or skipped the structure is committed — never
+        // restructure an exercise the user has already started.
+        if existing.contains(where: { $0.loggedAt != nil || $0.skipped }) { return }
 
         let baseTotal: Int = {
             let raw = ex.useDefaultTotalSets ? settings.defaultTotalSets : ex.totalSets
@@ -59,6 +62,23 @@ final class SessionController: ObservableObject {
         // When skipping W1 the kept warmup is the second one — index its
         // settings via offset so we use restWarm/warmPct/repsWarm.
         let warmupKindOffset = shouldSkipW1 ? 1 : 0
+
+        // Reconcile with any existing (still-unstarted) set list. The cold-
+        // warmup-once decision depends on deferral order, which can change
+        // after a list was first built: skipping the first exercise of a
+        // muscle hands its cold warmup to the next one, and resuming the
+        // skipped exercise later must drop its now-redundant cold warmup. If
+        // the current shape already matches, this is a no-op (keeps the
+        // per-render call idempotent); otherwise rebuild from scratch.
+        if !existing.isEmpty {
+            let (curWarmups, curLoads) = SetLabeler.warmupAndLoadCounts(in: existing)
+            let curLeadsCold = existing.first?.kind == .cold
+            let wantsLeadCold = warmups > 0 && warmupKindOffset == 0
+            if curWarmups == warmups, curLoads == loads, curLeadsCold == wantsLeadCold {
+                return
+            }
+            for s in existing { context.delete(s) }
+        }
 
         var order = 0
         for i in 0..<warmups {
@@ -84,20 +104,57 @@ final class SessionController: ObservableObject {
         try? context.save()
     }
 
-    /// True if any earlier log this session targets the same primary muscle
-    /// AND already has built sets (i.e. the user has at least started warming
-    /// up that muscle group).
+    /// True if another same-primary-muscle log owns this muscle's cold warmup
+    /// this session, meaning `currentLog` should drop its own. A log owns it if
+    /// it has ALREADY performed a warmup set, or — for the not-yet-performed
+    /// case — if it comes first in deferral-aware order (see `effectivelyBefore`).
+    ///
+    /// The performed check is what makes un-skipping correct: un-skipping the
+    /// first exercise flips it back to non-deferred, which puts it AHEAD of the
+    /// exercise that already did the warmup in template order — so an order-only
+    /// test would wrongly hand the cold warmup back to it. Ground-truth
+    /// "someone already warmed this muscle" doesn't have that ambiguity.
     private func muscleAlreadyWarmedUp(_ muscleKey: String, before currentLog: ExerciseLog) -> Bool {
         guard !muscleKey.isEmpty else { return false }
         for other in session.orderedLogs where other.id != currentLog.id {
-            // Only count exercises that come BEFORE this one in the session.
-            guard other.order < currentLog.order else { continue }
-            // Must have at least one built set (otherwise it hasn't "warmed
-            // up" anything — could just be an empty placeholder).
-            guard !other.orderedSets.isEmpty else { continue }
-            if other.exercise?.primaryMuscle?.rawValue == muscleKey { return true }
+            guard other.exercise?.primaryMuscle?.rawValue == muscleKey else { continue }
+            if hasPerformedWarmup(other) || effectivelyBefore(other, currentLog) {
+                return true
+            }
         }
         return false
+    }
+
+    /// True if `log` has a logged, non-skipped warmup (cold/warm) set — i.e. it
+    /// has actually warmed up its primary muscle this session.
+    private func hasPerformedWarmup(_ log: ExerciseLog) -> Bool {
+        log.orderedSets.contains {
+            ($0.kind == .cold || $0.kind == .warm) && $0.loggedAt != nil && !$0.skipped
+        }
+    }
+
+    /// Order in which `activeCursor` reaches logs: every non-deferred log (in
+    /// template order) first, then deferred logs (in template order). So a
+    /// skipped/deferred exercise is effectively performed AFTER all
+    /// non-deferred ones regardless of its template position.
+    private func effectivelyBefore(_ a: ExerciseLog, _ b: ExerciseLog) -> Bool {
+        let aDeferred = a.deferredAt != nil
+        let bDeferred = b.deferredAt != nil
+        if aDeferred != bDeferred { return bDeferred }
+        return a.order < b.order
+    }
+
+    /// Re-run `buildSets` on whatever exercise is now active so its cold-
+    /// warmup-once shape reflects the current deferral order. `buildSets` is a
+    /// no-op when the shape already matches or the exercise has been started,
+    /// so this is safe after any structural change. Needed because skipping /
+    /// unskipping can hand a muscle's cold warmup to a different exercise
+    /// without ever crossing a set-log boundary (which is the only other place
+    /// the view rebuilds), e.g. resuming a skipped first exercise whose cold
+    /// warmup a later same-muscle exercise has since taken over.
+    private func reconcileActiveCursorSets() {
+        guard let (log, _) = activeCursor() else { return }
+        buildSets(for: log)
     }
 
     func logSet(_ s: SetLog) {
@@ -234,6 +291,7 @@ final class SessionController: ObservableObject {
         guard let (log, _) = activeCursor() else { return }
         log.deferredAt = Date()
         try? context.save()
+        reconcileActiveCursorSets()
         bumpRevision()
     }
 
@@ -252,6 +310,7 @@ final class SessionController: ObservableObject {
         guard let target = candidates.first else { return false }
         target.deferredAt = nil
         try? context.save()
+        reconcileActiveCursorSets()
         bumpRevision()
         return true
     }
